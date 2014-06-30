@@ -6,10 +6,10 @@
 #include "../glr.h"
 
 #define MSAA_SAMPLES 8
-#define WIDTH  1280
-#define HEIGHT  720
+#define WIDTH  1920
+#define HEIGHT  800
 
-#define MAX_LAYERS 10
+#define MAX_LAYERS 15
 
 static GlrContext *context = NULL;
 static GlrTarget *target = NULL;
@@ -48,10 +48,10 @@ draw_layer (GlrLayer  *layer,
   glr_paint_set_color_hue (&paint, layer_index * 500, 220);
   glr_paint_set_style (&paint, GLR_PAINT_STYLE_FILL);
   glr_layer_set_transform_origin (layer, 0.6, 0.5);
-  glr_layer_rotate (layer, - ((frame % 360) * (layer_index/2 + 1)));
+  glr_layer_rotate (layer, 0.0 - (frame % 360) * (layer_index/2 + 1));
   glr_layer_draw_rounded_rect (layer,
-                               80 * layer_index,
-                               30 * layer_index,
+                               90 * layer_index,
+                               20 * layer_index,
                                100 + layer_index * 30,
                                100 + layer_index * 30,
                                25,
@@ -82,7 +82,6 @@ main (int argc, char* argv[])
   canvas = glr_canvas_new (target);
 
   glEnable (GL_BLEND);
-  glLineWidth (1.0);
 
   /* lets create a fixed layer whose contents will live across all frames */
   GlrLayer *fixed_layer = glr_layer_new (context);
@@ -97,11 +96,11 @@ main (int argc, char* argv[])
     {
       frame++;
 
-      glr_paint_set_color (&paint, 50, 50, 50, 255);
-      glr_canvas_clear (canvas, &paint);
-
       /* notify canvas that you want to start drawing for a new frame */
       glr_canvas_start_frame (canvas);
+
+      glr_paint_set_color (&paint, 127, 127, 127, 255);
+      glr_canvas_clear (canvas, &paint);
 
       /* create and attach layers */
       for (i = MAX_LAYERS - 1; i >= 0; i--)

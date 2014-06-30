@@ -112,10 +112,12 @@ load_shader (const char *shader_source, GLenum type)
 static void
 clear_background (GlrCanvas *self)
 {
-  glClearColor ((self->clear_color >> 24) / 255.0,
-                ((self->clear_color >> 16) & 0x00FF) / 255.0,
-                ((self->clear_color >>  8) & 0x0000FF) / 255.0,
-                (self->clear_color & 0x000000FF) / 255.0);
+  static const guint32 MASK_8_BIT = 0x000000FF;
+
+  glClearColor ((GLclampf) (self->clear_color >> 24              )  / 255.0,
+                (GLclampf) ((self->clear_color >> 16) & MASK_8_BIT) / 255.0,
+                (GLclampf) ((self->clear_color >>  8) & MASK_8_BIT) / 255.0001,
+                (GLclampf) ( self->clear_color        & MASK_8_BIT) / 255.0);
   glClear (GL_COLOR_BUFFER_BIT);
 }
 

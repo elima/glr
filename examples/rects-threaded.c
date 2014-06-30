@@ -100,8 +100,7 @@ main (int argc, char* argv[])
   layer2 = glr_layer_new (context);
 
   glEnable (GL_BLEND);
-  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glLineWidth (2.0);
+  glLineWidth (1.0);
 
   /* start the show */
   guint frame = 0;

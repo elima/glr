@@ -53,11 +53,6 @@ draw_layer (GlrLayer  *layer,
   GlrPaint paint;
   GlrFont font = {0};
 
-  glr_paint_set_color (&paint, 0, 0, 0, 255);
-  glr_canvas_clear (canvas, &paint);
-
-  glr_layer_translate (layer, 0.0, 0.0);
-
   font.face = FONT_FILE;
   font.face_index = 0;
 
@@ -84,7 +79,6 @@ draw_layer (GlrLayer  *layer,
             glr_layer_set_transform_origin (layer, +2.5, 0.5);
             glr_layer_scale (layer, 1.0, 1.0);
             glr_paint_set_color_hue (&paint, frame + i + j + ((i + j % 2) * 4), 255);
-            // glr_paint_set_color (&paint, 255, 255, 255, 255);
             glr_layer_rotate (layer, (frame*2 + i + j) / 75.0 * 180.0);
             font.size = FONT_SIZE;
             glr_layer_draw_char (layer,
@@ -123,15 +117,21 @@ main (int argc, char* argv[])
   layer = glr_layer_new (context);
 
   glEnable (GL_BLEND);
+  // glDisable (GL_DEPTH_TEST);
+  glLineWidth (1.0);
 
   /* start the show */
   guint frame = 0;
+  GlrPaint paint;
 
   do
     {
       frame++;
 
       glr_canvas_start_frame (canvas);
+
+      glr_paint_set_color (&paint, 0, 0, 0, 255);
+      glr_canvas_clear (canvas, &paint);
 
       /* attach our layer */
       glr_canvas_attach_layer (canvas, 0, layer);

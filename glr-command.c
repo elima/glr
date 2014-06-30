@@ -23,6 +23,7 @@
 #define MAX_TEX_AREA_BUFFER_SIZE  (MAX_LAYOUT_BUFFER_SIZE / 4)
 
 #define EQUALS(x, y) (fabs (x - y) < DBL_EPSILON * fabs (x + y))
+// #define EQUALS(x, y) (fabs (x) - fabs(y) < DBL_EPSILON)
 
 #define PRIMITIVE_ATTR 0
 #define LAYOUT_ATTR    1
@@ -233,13 +234,6 @@ glr_command_add_instance (GlrCommand          *self,
   if (has_transform (transform))
     {
       guint32 transform_offset;
-
-      /*
-      g_print ("has transform! rot: %f, scale_x: %f, scale_y: %f\n",
-               transform->rotation_z,
-               transform->scale_x,
-               transform->scale_y);
-      */
 
       transform_offset = self->transform_buffer_count * 4;
       memcpy (&self->transform_buffer[transform_offset],

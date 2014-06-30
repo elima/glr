@@ -434,7 +434,7 @@ glr_layer_rotate (GlrLayer *self, gfloat angle)
 {
   CHECK_LAYER_NOT_FINSHED (self);
 
-  self->transform.rotation_z = angle * ((M_PI * 2.0) / 360.0);
+  self->transform.rotation_z = angle * ((((gfloat) M_PI * 2.0) / 360.0));
 }
 
 void
