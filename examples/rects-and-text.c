@@ -6,15 +6,15 @@
 #include "../glr.h"
 
 #define MSAA_SAMPLES 8
-#define WIDTH  1920
-#define HEIGHT  800
+#define WIDTH   960
+#define HEIGHT  960
 
 #define FONT_FILE  (FONTS_DIR "Cantarell-Regular.otf")
 // #define FONT_PATH "./fonts/DejaVuSansMono-Bold.ttf"
 // #define FONT_PATH "./fonts/Ubuntu-Title.ttf"
 
 #define FONT_SIZE 24
-#define SCALE 40
+#define SCALE 60
 
 static GlrContext *context = NULL;
 static GlrTarget *target = NULL;
@@ -59,9 +59,9 @@ draw_layer (GlrLayer  *layer,
   for (i = 0; i < scale; i++)
     for (j = 0; j < scale; j++)
       {
-        glr_layer_set_transform_origin (layer, 0.5, 0.5);
+        glr_layer_set_transform_origin (layer, 0.0, 0.0);
         glr_layer_rotate (layer, - ((frame*2 + i + j) / 50.0 * 180.0));
-        glr_paint_set_color_hue (&paint, frame + i + j + ((i + j %2) * 3), 100);
+        glr_paint_set_color_hue (&paint, frame + i + j + ((i + j % 2) * 3), 100);
         glr_layer_scale (layer,
                          cos ((M_PI/60.0) * ((frame + i + j/(i+1)) % 60))*2 + 1.0,
                          cos ((M_PI/60.0) * ((frame + i + j/(i+1)) % 60))*2 + 1.0);
@@ -76,13 +76,13 @@ draw_layer (GlrLayer  *layer,
           }
         else
           {
-            glr_layer_set_transform_origin (layer, +2.5, 0.5);
+            glr_layer_set_transform_origin (layer, 0.0, 0.0);
             glr_layer_scale (layer, 1.0, 1.0);
             glr_paint_set_color_hue (&paint, frame + i + j + ((i + j % 2) * 4), 255);
             glr_layer_rotate (layer, (frame*2 + i + j) / 75.0 * 180.0);
             font.size = FONT_SIZE;
             glr_layer_draw_char (layer,
-                                 (i) % scale + 46,
+                                 i % scale + 46,
                                  i * WIDTH/scale - (j%3)*(font.size/2), j * HEIGHT/scale,
                                  &font,
                                  &paint);
@@ -109,7 +109,7 @@ main (int argc, char* argv[])
       return -2;
     }
 
-  glfwSetWindowTitle (argv[0]);
+  glfwSetWindowTitle ("RectsAndText - glr");
 
   context = glr_context_new ();
   target = glr_target_new (WIDTH, HEIGHT, MSAA_SAMPLES);
@@ -117,8 +117,6 @@ main (int argc, char* argv[])
   layer = glr_layer_new (context);
 
   glEnable (GL_BLEND);
-  // glDisable (GL_DEPTH_TEST);
-  glLineWidth (1.0);
 
   /* start the show */
   guint frame = 0;
@@ -151,7 +149,7 @@ main (int argc, char* argv[])
                          GL_COLOR_BUFFER_BIT,
                          GL_NEAREST);
 
-      log_times_per_second ("FPS: %f\n");
+      log_times_per_second ("FPS: %04f\n");
       glfwSwapBuffers ();
     }
   while (glfwGetKey (GLFW_KEY_ESC) != GLFW_PRESS && glfwGetWindowParam (GLFW_OPENED));

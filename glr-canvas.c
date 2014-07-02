@@ -114,10 +114,10 @@ clear_background (GlrCanvas *self)
 {
   static const guint32 MASK_8_BIT = 0x000000FF;
 
-  glClearColor ((GLclampf) (self->clear_color >> 24              )  / 255.0,
-                (GLclampf) ((self->clear_color >> 16) & MASK_8_BIT) / 255.0,
-                (GLclampf) ((self->clear_color >>  8) & MASK_8_BIT) / 255.0001,
-                (GLclampf) ( self->clear_color        & MASK_8_BIT) / 255.0);
+  glClearColor ( (self->clear_color >> 24              )  / 255.0,
+                ((self->clear_color >> 16) & MASK_8_BIT) / 255.0,
+                ((self->clear_color >>  8) & MASK_8_BIT) / 255.0001,
+                ( self->clear_color        & MASK_8_BIT) / 255.0);
   glClear (GL_COLOR_BUFFER_BIT);
 }
 

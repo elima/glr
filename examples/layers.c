@@ -6,10 +6,11 @@
 #include "../glr.h"
 
 #define MSAA_SAMPLES 8
-#define WIDTH  1920
-#define HEIGHT  800
+#define WIDTH   960
+#define HEIGHT  960
 
-#define MAX_LAYERS 15
+#define MAX_LAYERS 20
+#define SCALE 10
 
 static GlrContext *context = NULL;
 static GlrTarget *target = NULL;
@@ -44,18 +45,25 @@ draw_layer (GlrLayer  *layer,
             guint      layer_index)
 {
   GlrPaint paint;
+  gint i, j;
 
-  glr_paint_set_color_hue (&paint, layer_index * 500, 220);
-  glr_paint_set_style (&paint, GLR_PAINT_STYLE_FILL);
-  glr_layer_set_transform_origin (layer, 0.6, 0.5);
-  glr_layer_rotate (layer, 0.0 - (frame % 360) * (layer_index/2 + 1));
-  glr_layer_draw_rounded_rect (layer,
-                               90 * layer_index,
-                               20 * layer_index,
-                               100 + layer_index * 30,
-                               100 + layer_index * 30,
-                               25,
-                               &paint);
+  for (i = 0; i < SCALE; i++)
+    for (j = 0; j < SCALE; j++)
+      {
+        gint k = layer_index;
+
+        glr_paint_set_color_hue (&paint, layer_index * 500, 200);
+        glr_paint_set_style (&paint, GLR_PAINT_STYLE_FILL);
+        glr_layer_set_transform_origin (layer, 0.0, 0.0);
+        glr_layer_rotate (layer, 0.0 - (frame % 1080) * ((MAX_LAYERS - k)/2.0 + 1.0));
+        glr_layer_draw_rounded_rect (layer,
+                                     WIDTH/SCALE * i + k*20,
+                                     WIDTH/SCALE * j,
+                                     30 + WIDTH/SCALE/(k+1),
+                                     30 + HEIGHT/SCALE/(k+1),
+                                     5,
+                                     &paint);
+      }
 
   glr_layer_finish (layer);
 }
@@ -75,17 +83,13 @@ main (int argc, char* argv[])
       return -2;
     }
 
-  glfwSetWindowTitle (argv[0]);
+  glfwSetWindowTitle ("Layers - glr");
 
   context = glr_context_new ();
   target = glr_target_new (WIDTH, HEIGHT, MSAA_SAMPLES);
   canvas = glr_canvas_new (target);
 
   glEnable (GL_BLEND);
-
-  /* lets create a fixed layer whose contents will live across all frames */
-  GlrLayer *fixed_layer = glr_layer_new (context);
-  draw_layer (fixed_layer, 0, 0);
 
   /* start the show */
   guint frame = 0;
@@ -111,9 +115,6 @@ main (int argc, char* argv[])
           draw_layer (layers[i], frame, i + 1);
         }
 
-      /* attach the fixed layer to be the bottom most */
-      glr_canvas_attach_layer (canvas, 0, fixed_layer);
-
       /* finally, sync all layers drawings and execute
          all layers' batched commands */
       glr_canvas_finish_frame (canvas);
@@ -126,7 +127,7 @@ main (int argc, char* argv[])
                          GL_COLOR_BUFFER_BIT,
                          GL_NEAREST);
 
-      log_times_per_second ("FPS: %f\n");
+      log_times_per_second ("FPS: %04f\n");
       glfwSwapBuffers ();
 
       /* destroy layers */
@@ -139,7 +140,6 @@ main (int argc, char* argv[])
 
   glr_canvas_unref (canvas);
   glr_target_unref (target);
-  glr_layer_unref (fixed_layer);
   glr_context_unref (context);
 
   glfwTerminate ();

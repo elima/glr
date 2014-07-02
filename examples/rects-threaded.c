@@ -6,10 +6,10 @@
 #include "../glr.h"
 
 #define MSAA_SAMPLES 8
-#define WIDTH  1920
-#define HEIGHT  800
+#define WIDTH   960
+#define HEIGHT  960
 
-#define SCALE 80
+#define SCALE 120
 
 static GlrContext *context = NULL;
 static GlrTarget *target = NULL;
@@ -53,7 +53,7 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
         gdouble rotation = ((frame + i + j) / 25.0 * 180.0);
         guint scaling = (layer == layer1) ? 60 : 75;
 
-        glr_layer_set_transform_origin (layer, -1.0, 0.5);
+        glr_layer_set_transform_origin (layer, 0.0, 0.0);
         glr_layer_rotate (layer, layer == layer1 ? rotation : -rotation);
         glr_paint_set_color_hue (&paint, frame + i + j + ((i + j %2) * 3), 255);
         glr_layer_scale (layer,
@@ -91,7 +91,7 @@ main (int argc, char* argv[])
       return -2;
     }
 
-  glfwSetWindowTitle (argv[0]);
+  glfwSetWindowTitle ("Rects - glr");
 
   context = glr_context_new ();
   target = glr_target_new (WIDTH, HEIGHT, MSAA_SAMPLES);
@@ -136,7 +136,7 @@ main (int argc, char* argv[])
                          GL_COLOR_BUFFER_BIT,
                          GL_NEAREST);
 
-      log_times_per_second ("FPS: %f\n");
+      log_times_per_second ("FPS: %04f\n");
       glfwSwapBuffers ();
     }
   while (glfwGetKey (GLFW_KEY_ESC) != GLFW_PRESS && glfwGetWindowParam (GLFW_OPENED));
