@@ -1,0 +1,477 @@
+From 194e2dd4db6245393a390e571d9c22b999fbe942 Mon Sep 17 00:00:00 2001
+From: Eduardo Lima Mitev <elima@igalia.com>
+Date: Wed, 2 Jul 2014 23:39:53 +0000
+Subject: [PATCH] Adds 3 samples to SkiaExamples to compare some drawing
+ use-cases with glr for performance
+
+Also sets multisampling anti-aliasing to 8.
+---
+ experimental/SkiaExamples/Layers.cpp       | 115 +++++++++++++++++++++++
+ experimental/SkiaExamples/Rects.cpp        | 141 +++++++++++++++++++++++++++++
+ experimental/SkiaExamples/RectsAndText.cpp | 132 +++++++++++++++++++++++++++
+ experimental/SkiaExamples/SkExample.cpp    |   4 +-
+ gyp/experimental.gyp                       |   3 +
+ gyp/most.gyp                               |   2 +-
+ 6 files changed, 394 insertions(+), 3 deletions(-)
+ create mode 100644 experimental/SkiaExamples/Layers.cpp
+ create mode 100644 experimental/SkiaExamples/Rects.cpp
+ create mode 100644 experimental/SkiaExamples/RectsAndText.cpp
+
+diff --git a/experimental/SkiaExamples/Layers.cpp b/experimental/SkiaExamples/Layers.cpp
+new file mode 100644
+index 0000000..a19257e
+--- /dev/null
++++ b/experimental/SkiaExamples/Layers.cpp
+@@ -0,0 +1,115 @@
++#include "SkExample.h"
++#include "SkDevice.h"
++#include <stdio.h>
++#include <time.h>
++
++#define WIDTH   960
++#define HEIGHT  960
++
++#define MAX_LAYERS 20
++#define SCALE 10
++
++static void
++log_times_per_second (const char *msg_format)
++{
++  static unsigned int counter = 0;
++  static time_t last_time = 0;
++  static int interval = 2;
++  time_t cur_time;
++
++  if (last_time == 0)
++    last_time = time (NULL);
++
++  counter++;
++
++  cur_time = time (NULL);
++  if (cur_time >= last_time + interval)
++    {
++      printf (msg_format, (double) (counter / interval));
++      counter = 0;
++      last_time = cur_time;
++    }
++}
++
++class Layers : public SkExample {
++public:
++  Layers(SkExampleWindow* window)
++  : SkExample(window)
++  {
++    fName = "Layers";
++
++    fWindow->setupBackend(SkExampleWindow::kGPU_DeviceType);
++    fWindow->setTitle("Layers - Skia");
++    window->setSize(WIDTH, HEIGHT);
++  }
++
++protected:
++  virtual void draw(SkCanvas* canvas) SK_OVERRIDE {
++    static int frame = 0;
++    SkPaint paint;
++
++    frame++;
++
++    // Clear background
++    canvas->drawColor(SK_ColorGRAY);
++    paint.setAntiAlias(true);
++
++    int i, j, k;
++
++    paint.setStyle(SkPaint::kFill_Style);
++
++    for (k = 1; k <= MAX_LAYERS; k++)
++      for (i = 0; i < SCALE; i++)
++        for (j = 0; j < SCALE; j++)
++          {
++            canvas->save();
++            canvas->translate(WIDTH / SCALE * i + k*20, HEIGHT / SCALE * j);
++            canvas->rotate(0.0 - (frame % 1080) * ((MAX_LAYERS - k)/2.0 + 1.0));
++            SkColor color = getColor(k * 500, 200);
++            paint.setColor(color);
++            SkRect rect = SkRect::MakeXYWH(SkIntToScalar(0),
++                                           SkIntToScalar(0),
++                                           SkIntToScalar(30 + WIDTH/SCALE/(k+1)),
++                                           SkIntToScalar(30 + WIDTH/SCALE/(k+1)));
++            SkRRect rrect;
++            rrect.setRectXY(rect, 5, 5);
++            canvas->drawRRect(rrect, paint);
++            canvas->restore();
++          }
++
++    this->fWindow->inval(NULL);
++    log_times_per_second("FPS: %04f\n");
++  }
++
++private:
++  int max(int a, int b) {
++    if (a > b)
++      return a;
++    return b;
++  }
++
++  int min(int a, int b) {
++    if (a > b)
++      return b;
++    return a;
++  }
++
++  SkColor getColor(int hue, int alpha) {
++    int redShift = 180;
++    int greenShift = 60;
++    int blueShift = -60;
++    int red, green, blue;
++    double r, g, b;
++    r = (max(min((180 - abs(180 - (hue + redShift) % 360)), 120), 60) - 60) / 60.0;
++    g = (max(min((180 -abs(180 - (hue + greenShift) % 360)), 120), 60) - 60) / 60.0;
++    b = (max(min((180 -abs(180 - (hue + blueShift) % 360)), 120), 60) - 60) / 60.0;
++    red = r * 255; green = g * 255; blue = b * 255;
++    SkColor color(alpha << 24 | red << 16 | green << 8 | blue);
++    return color;
++  }
++};
++
++static SkExample* MyFactory(SkExampleWindow* window) {
++  return new Layers(window);
++}
++static SkExample::Registry registry(MyFactory);
+diff --git a/experimental/SkiaExamples/Rects.cpp b/experimental/SkiaExamples/Rects.cpp
+new file mode 100644
+index 0000000..bd458e8
+--- /dev/null
++++ b/experimental/SkiaExamples/Rects.cpp
+@@ -0,0 +1,141 @@
++#include "SkExample.h"
++#include "SkDevice.h"
++#include <stdio.h>
++#include <time.h>
++
++#define WIDTH   960
++#define HEIGHT  960
++
++#define SCALE 120
++
++static void
++log_times_per_second (const char *msg_format)
++{
++  static unsigned int counter = 0;
++  static time_t last_time = 0;
++  static int interval = 2;
++  time_t cur_time;
++
++  if (last_time == 0)
++    last_time = time (NULL);
++
++  counter++;
++
++  cur_time = time (NULL);
++  if (cur_time >= last_time + interval)
++    {
++      printf (msg_format, (double) (counter / interval));
++      counter = 0;
++      last_time = cur_time;
++    }
++}
++
++class Rects : public SkExample {
++public:
++  Rects(SkExampleWindow* window)
++  : SkExample(window)
++  {
++    fName = "Rects";
++
++    fWindow->setupBackend(SkExampleWindow::kGPU_DeviceType);
++    fWindow->setTitle("Rects - Skia");
++    window->setSize(WIDTH, HEIGHT);
++  }
++
++protected:
++  virtual void draw(SkCanvas* canvas) SK_OVERRIDE {
++    static int frame = 0;
++    SkPaint paint;
++
++    frame++;
++
++    // Clear background
++    canvas->drawColor(SK_ColorWHITE);
++    paint.setAntiAlias(true);
++
++    int i, j;
++    int scale = SCALE / 2;
++
++    // filled rects
++    paint.setStyle(SkPaint::kFill_Style);
++    for (i = 0; i < scale; i++)
++      for (j = 0; j < scale; j++)
++        {
++          double rotation = ((frame + i + j) / 25.0 * 180.0);
++          long unsigned int scaling = 60;
++
++          canvas->save();
++          canvas->translate(SkIntToScalar(i * WIDTH / scale), SkIntToScalar(j * HEIGHT / scale));
++          canvas->rotate(rotation);
++          canvas->scale (cos ((M_PI/scaling) * ((frame + i + j) % scaling)) + 1,
++                         cos ((M_PI/scaling) * ((frame + i + j) % scaling)) + 1);
++          SkColor color = getColor(frame + i + j + ((i + j %2) * 3), 255);
++          SkRect rect = SkRect::MakeXYWH(SkIntToScalar(0),
++                                         SkIntToScalar(0),
++                                         SkIntToScalar(WIDTH / scale / 2),
++                                         SkIntToScalar(HEIGHT / scale / 2));
++          paint.setColor(color);
++          canvas->drawRect(rect, paint);
++          canvas->restore();
++        }
++
++    // stroked rects
++    paint.setStyle(SkPaint::kStroke_Style);
++    for (i = 0; i < scale; i++)
++      for (j = 0; j < scale; j++)
++        {
++          double rotation = ((frame + i + j) / 25.0 * 180.0);
++          long unsigned int scaling = 75;
++
++          canvas->save();
++          canvas->translate(SkIntToScalar(i * WIDTH / scale + WIDTH/scale/2),
++                            SkIntToScalar(j * HEIGHT / scale));
++          canvas->rotate(-rotation);
++          canvas->scale (cos ((M_PI/scaling) * ((frame + i + j) % scaling)) + 1,
++                         cos ((M_PI/scaling) * ((frame + i + j) % scaling)) + 1);
++          SkColor color = getColor(frame + i + j + ((i + j %2) * 3), 255);
++          SkRect rect = SkRect::MakeXYWH(SkIntToScalar(0),
++                                         SkIntToScalar(0),
++                                         SkIntToScalar(WIDTH / scale / 2),
++                                         SkIntToScalar(HEIGHT / scale / 2));
++          paint.setColor(color);
++          canvas->drawRect(rect, paint);
++          canvas->restore();
++        }
++
++    this->fWindow->inval(NULL);
++    log_times_per_second("FPS: %04f\n");
++  }
++
++private:
++  int max(int a, int b) {
++    if (a > b)
++      return a;
++    return b;
++  }
++
++  int min(int a, int b) {
++    if (a > b)
++      return b;
++    return a;
++  }
++
++  SkColor getColor(int hue, int alpha) {
++    int redShift = 180;
++    int greenShift = 60;
++    int blueShift = -60;
++    int red, green, blue;
++    double r, g, b;
++    r = (max(min((180 - abs(180 - (hue + redShift) % 360)), 120), 60) - 60) / 60.0;
++    g = (max(min((180 -abs(180 - (hue + greenShift) % 360)), 120), 60) - 60) / 60.0;
++    b = (max(min((180 -abs(180 - (hue + blueShift) % 360)), 120), 60) - 60) / 60.0;
++    red = r * 255; green = g * 255; blue = b * 255;
++    SkColor color(alpha << 24 | red << 16 | green << 8 | blue);
++    return color;
++  }
++};
++
++static SkExample* MyFactory(SkExampleWindow* window) {
++  return new Rects(window);
++}
++static SkExample::Registry registry(MyFactory);
+diff --git a/experimental/SkiaExamples/RectsAndText.cpp b/experimental/SkiaExamples/RectsAndText.cpp
+new file mode 100644
+index 0000000..7c42c1a
+--- /dev/null
++++ b/experimental/SkiaExamples/RectsAndText.cpp
+@@ -0,0 +1,132 @@
++#include "SkExample.h"
++#include "SkDevice.h"
++#include <stdio.h>
++#include <time.h>
++
++#define WIDTH   960
++#define HEIGHT  960
++
++#define FONT_SIZE 24
++#define SCALE 60
++
++static void
++log_times_per_second (const char *msg_format)
++{
++  static unsigned int counter = 0;
++  static time_t last_time = 0;
++  static int interval = 2;
++  time_t cur_time;
++
++  if (last_time == 0)
++    last_time = time (NULL);
++
++  counter++;
++
++  cur_time = time (NULL);
++  if (cur_time >= last_time + interval)
++    {
++      printf (msg_format, (double) (counter / interval));
++      counter = 0;
++      last_time = cur_time;
++    }
++}
++
++class RectsAndText : public SkExample {
++public:
++  RectsAndText(SkExampleWindow* window)
++  : SkExample(window)
++  {
++    fName = "RectsAndText";
++
++    fWindow->setupBackend(SkExampleWindow::kGPU_DeviceType);
++    fWindow->setTitle("RectsAndText - Skia");
++    window->setSize(WIDTH, HEIGHT);
++  }
++
++protected:
++  virtual void draw(SkCanvas* canvas) SK_OVERRIDE {
++    static int frame = 0;
++    SkPaint paint;
++
++    frame++;
++
++    // Clear background
++    canvas->drawColor(SK_ColorBLACK);
++
++    int i, j;
++    int scale = SCALE;
++
++    paint.setStyle(SkPaint::kFill_Style);
++
++    for (i = 0; i < scale; i++)
++      for (j = 0; j < scale; j++)
++        {
++          canvas->save();
++
++          int step = (j * scale + i + (j % 2)) % 2;
++          if (step == 1) {
++            paint.setAntiAlias(true);
++            canvas->translate(SkIntToScalar(i * WIDTH / scale), SkIntToScalar(j * HEIGHT / scale));
++            canvas->rotate(- ((frame*2 + i + j) / 50.0 * 180.0));
++            SkColor color = getColor(frame + i + j + ((i + j %2) * 3), 100);
++            paint.setColor(color);
++            canvas->scale(cos ((M_PI/60.0) * ((frame + i + j/(i+1)) % 60))*2 + 1.0,
++                          cos ((M_PI/60.0) * ((frame + i + j/(i+1)) % 60))*2 + 1.0);
++            SkRect rect = SkRect::MakeXYWH(SkIntToScalar(0),
++                                           SkIntToScalar(0),
++                                           SkIntToScalar(WIDTH / scale),
++                                           SkIntToScalar(HEIGHT / scale));
++            canvas->drawRect(rect, paint);
++          } else {
++            paint.setAntiAlias(false);
++            canvas->translate(SkIntToScalar(i * WIDTH/scale - (j%3)*(FONT_SIZE/2)),
++                              SkIntToScalar(j * HEIGHT / scale));
++            canvas->rotate((frame*2 + i + j) / 75.0 * 180.0);
++            SkColor color = getColor(frame + i + j + ((i + j %2) * 3), 100);
++            paint.setColor(color);
++            canvas->scale (1.0, 1.0);
++            paint.setTextSize(FONT_SIZE);
++            char ch[2] = { 0 };
++            ch[0] = i % scale + 46;
++            canvas->drawText(ch, 1, 0, 0, paint);
++          }
++
++          canvas->restore();
++        }
++
++    this->fWindow->inval(NULL);
++    log_times_per_second("FPS: %04f\n");
++  }
++
++private:
++  int max(int a, int b) {
++    if (a > b)
++      return a;
++    return b;
++  }
++
++  int min(int a, int b) {
++    if (a > b)
++      return b;
++    return a;
++  }
++
++  SkColor getColor(int hue, int alpha) {
++    int redShift = 180;
++    int greenShift = 60;
++    int blueShift = -60;
++    int red, green, blue;
++    double r, g, b;
++    r = (max(min((180 - abs(180 - (hue + redShift) % 360)), 120), 60) - 60) / 60.0;
++    g = (max(min((180 -abs(180 - (hue + greenShift) % 360)), 120), 60) - 60) / 60.0;
++    b = (max(min((180 -abs(180 - (hue + blueShift) % 360)), 120), 60) - 60) / 60.0;
++    red = r * 255; green = g * 255; blue = b * 255;
++    SkColor color(alpha << 24 | red << 16 | green << 8 | blue);
++    return color;
++  }
++};
++
++static SkExample* MyFactory(SkExampleWindow* window) {
++  return new RectsAndText(window);
++}
++static SkExample::Registry registry(MyFactory);
+diff --git a/experimental/SkiaExamples/SkExample.cpp b/experimental/SkiaExamples/SkExample.cpp
+index 637ec9d..af65ddd 100644
+--- a/experimental/SkiaExamples/SkExample.cpp
++++ b/experimental/SkiaExamples/SkExample.cpp
+@@ -72,7 +72,7 @@ bool SkExampleWindow::setupBackend(DeviceType type) {
+     this->setVisibleP(true);
+     this->setClipToBounds(false);
+ 
+-    bool result = attach(kNativeGL_BackEndType, 0 /*msaa*/, &fAttachmentInfo);
++    bool result = attach(kNativeGL_BackEndType, 8 /*msaa*/, &fAttachmentInfo);
+     if (false == result) {
+         SkDebugf("Not possible to create backend.\n");
+         detach();
+@@ -97,7 +97,7 @@ void SkExampleWindow::setupRenderTarget() {
+     desc.fHeight = SkScalarRoundToInt(height());
+     desc.fConfig = kSkia8888_GrPixelConfig;
+     desc.fOrigin = kBottomLeft_GrSurfaceOrigin;
+-    desc.fSampleCnt = fAttachmentInfo.fSampleCount;
++    desc.fSampleCnt = 8; // fAttachmentInfo.fSampleCount;
+     desc.fStencilBits = fAttachmentInfo.fStencilBits;
+ 
+     GrGLint buffer;
+diff --git a/gyp/experimental.gyp b/gyp/experimental.gyp
+index c3789fa..1a4a7f0 100644
+--- a/gyp/experimental.gyp
++++ b/gyp/experimental.gyp
+@@ -27,6 +27,9 @@
+         '../experimental/SkiaExamples/SkExample.h',
+         '../experimental/SkiaExamples/SkExample.cpp',
+         '../experimental/SkiaExamples/HelloSkiaExample.cpp',
++        '../experimental/SkiaExamples/Rects.cpp',
++        '../experimental/SkiaExamples/RectsAndText.cpp',
++        '../experimental/SkiaExamples/Layers.cpp',
+       ],
+       'dependencies': [
+         'flags.gyp:flags',
+diff --git a/gyp/most.gyp b/gyp/most.gyp
+index ba18931..9082a04 100644
+--- a/gyp/most.gyp
++++ b/gyp/most.gyp
+@@ -32,7 +32,7 @@
+           'dependencies!': [ 'SampleApp.gyp:SampleApp' ],
+         }],
+         ['skia_os == "mac" or skia_os == "linux"', {
+-          'dependencies': [ 'nanomsg.gyp:*' ],
++        #  'dependencies': [ 'nanomsg.gyp:*' ],
+         }],
+         [ 'skia_skip_gui',
+           {
+-- 
+2.0.0
+
