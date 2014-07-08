@@ -1,5 +1,4 @@
-#version 130
-#extension GL_ARB_draw_instanced : enable
+#version 300 es
 
 // const float PI = 3.1415926535897932384626433832795;
 const int TRANSFORM_TEX_WIDTH  = int (1024);
@@ -15,11 +14,11 @@ uniform uint height;
 
 uniform sampler2D transform_buffer;
 
-attribute vec4 vertex;
-attribute uint col;
-attribute vec4 lyt;
-attribute uvec2 config;
-attribute uint tex_area;
+layout(location = 0) in vec4 vertex;
+layout(location = 1) in vec4 lyt;
+layout(location = 2) in uint col;
+layout(location = 3) in uvec2 config;
+layout(location = 4) in uint tex_area;
 
 out vec4 color;
 flat out uvec4 area_in_atlas;
@@ -32,7 +31,10 @@ void main()
   float step;
 
   // load layout
-  vec4 l = vec4 (lyt.x / width, lyt.y / height, lyt.z / width, lyt.w / height);
+  vec4 l = vec4 (lyt.x / float (width),
+                 lyt.y / float (height),
+                 lyt.z / float (width),
+                 lyt.w / float (height));
   mat4 st = mat4 (
     l.z * 2.0,          0.0, 0.0, -1.0 + l.x * 2.0,
           0.0, -(l.w * 2.0), 0.0,  1.0 - l.y * 2.0,
@@ -46,15 +48,15 @@ void main()
 
   if (transform_index > uint (0))
     {
-      float step_x = 1.0 / (TRANSFORM_TEX_WIDTH);
-      float step_y = 1.0 / (TRANSFORM_TEX_HEIGHT);
+      float step_x = 1.0 / float (TRANSFORM_TEX_WIDTH);
+      float step_y = 1.0 / float (TRANSFORM_TEX_HEIGHT);
 
       int offset = int (transform_index) - 1;
       int column = offset % TRANSFORM_TEX_WIDTH;
       int row = offset / TRANSFORM_TEX_WIDTH;
 
-      vec2 transform1_pos = vec2 (column * step_x, row * step_y);
-      vec2 transform2_pos = vec2 ((column + 1) * step_x, row * step_y);
+      vec2 transform1_pos = vec2 (float (column) * step_x, float (row) * step_y);
+      vec2 transform2_pos = vec2 (float (column + 1) * step_x, float (row) * step_y);
       vec4 transform1 = texture (transform_buffer, transform1_pos);
       vec4 transform2 = texture (transform_buffer, transform2_pos);
 
@@ -154,7 +156,7 @@ void main()
 
       pos = pos * object_scale_inv * parent_translate;
 
-      if (parent_rotation_z != 0)
+      if (parent_rotation_z != 0.0)
         {
           rotation = mat4 (
             cos (parent_rotation_z), -sin (parent_rotation_z),  0.0, 0.0,
@@ -179,10 +181,10 @@ void main()
   // 3 most significant bits describe the type of background
   background_type = int (background_config >> 29);
 
-  color = vec4 ( (col >> 24)               / 255.0,
-                ((col >> 16) & MASK_8_BIT) / 255.0,
-                ((col >>  8) & MASK_8_BIT) / 255.0,
-                ( col        & MASK_8_BIT) / 255.0);
+  color = vec4 (float ( col >> 24)               / 255.0,
+                float ((col >> 16) & MASK_8_BIT) / 255.0,
+                float ((col >>  8) & MASK_8_BIT) / 255.0,
+                float ( col        & MASK_8_BIT) / 255.0);
 
   if (background_type == BACKGROUND_TEXTURE)
     {
