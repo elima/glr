@@ -102,7 +102,7 @@ main (int argc, char *argv[])
 {
   /* init windowing system */
   utils_initialize_x11 (WIDTH, HEIGHT, "Rects");
-  utils_initialize_egl (MSAA_SAMPLES);
+  utils_initialize_egl ();
 
   /* init OpenGL */
   glLineWidth (1.0);

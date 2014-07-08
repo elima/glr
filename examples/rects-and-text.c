@@ -117,7 +117,7 @@ main (int argc, char* argv[])
 {
   /* init windowing system */
   utils_initialize_x11 (WIDTH, HEIGHT, "RectsAndText");
-  utils_initialize_egl (MSAA_SAMPLES);
+  utils_initialize_egl ();
 
   /* init glr */
   context = glr_context_new ();

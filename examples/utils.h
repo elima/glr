@@ -10,7 +10,7 @@ typedef void (* ResizeCallback) (guint    width,
 
 gint utils_initialize_x11  (guint width, guint height, const gchar *win_title);
 void utils_finalize_x11    (void);
-gint utils_initialize_egl  (guint msaa_samples);
+gint utils_initialize_egl  (void);
 void utils_finalize_egl    (void);
 
 void utils_main_loop       (DrawCallback   draw_cb,

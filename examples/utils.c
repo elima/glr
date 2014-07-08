@@ -140,7 +140,7 @@ utils_finalize_x11 (void)
 }
 
 gint
-utils_initialize_egl (guint msaa_samples)
+utils_initialize_egl (void)
 {
   egl_display = eglGetDisplay ((EGLNativeDisplayType) x_display);
   if (egl_display == EGL_NO_DISPLAY)
