@@ -4,7 +4,7 @@
 #include <GL/gl.h>
 
 inline void   glGenFramebuffers         (GLsizei n, GLuint* ids);
-inline void   glDeleteFramebuffers      (GLsizei n, GLuint  *framebuffers);
+inline void   glDeleteFramebuffers      (GLsizei n, const GLuint *framebuffers);
 inline void   glBindFramebuffer         (GLenum target, GLuint framebuffer);
 inline void   glFramebufferTexture2D    (GLenum target,
                                          GLenum attachment,
@@ -71,5 +71,21 @@ inline void   glTexImage2DMultisample   (GLenum    target,
                                          GLsizei   width,
                                          GLsizei   height,
                                          GLboolean fixedsamplelocations);
+
+inline void   glGenRenderbuffers               (GLsizei  n,
+                                                GLuint  *renderbuffers);
+inline void   glRenderbufferStorageMultisample (GLenum  target,
+                                                GLsizei samples,
+                                                GLenum  internalformat,
+                                                GLsizei width,
+                                                GLsizei height);
+inline void   glFramebufferRenderbuffer        (GLenum target,
+                                                GLenum attachment,
+                                                GLenum renderbuffertarget,
+                                                GLuint renderbuffer);
+inline void   glBindRenderbuffer               (GLenum target,
+                                                GLuint renderbuffer);
+inline void   glDeleteRenderbuffers            (GLsizei       n,
+                                                const GLuint *renderbuffers);
 
 #endif /* _GLR_SYMBOLS_H_ */

@@ -7,8 +7,8 @@
 
 typedef void   (GLAPIENTRY *PFNGLGENFRAMEBUFFERS)        (GLsizei  n,
                                                           GLuint  *ids);
-typedef void   (GLAPIENTRY *PFNGLDELETEFRAMEBUFFERS)     (GLsizei  n,
-                                                          GLuint  *framebuffers);
+typedef void   (GLAPIENTRY *PFNGLDELETEFRAMEBUFFERS)     (GLsizei       n,
+                                                          const GLuint *framebuffers);
 typedef void   (GLAPIENTRY *PFNGLBINDFRAMEBUFFER)        (GLenum target,
                                                           GLuint framebuffer);
 typedef void   (GLAPIENTRY *PFNGLFRAMEBUFFERTEXTURE2D)   (GLenum target,
@@ -74,6 +74,22 @@ typedef void   (GLAPIENTRY *PFNGLTEXIMAGE2DMULTISAMPLE)  (GLenum    target,
                                                           GLsizei   height,
                                                           GLboolean fixedsamplelocations);
 
+typedef void  (GLAPIENTRY *PFNGLGENRENDERBUFFERS)              (GLsizei  n,
+                                                                GLuint  *renderbuffers);
+typedef void (GLAPIENTRY *PFNGLRENDERBUFFERSTORAGEMULTISAMPLE) (GLenum  target,
+                                                                GLsizei samples,
+                                                                GLenum  internalformat,
+                                                                GLsizei width,
+                                                                GLsizei height);
+typedef void (GLAPIENTRY *PFNGLFRAMEBUFFERRENDERBUFFER)        (GLenum target,
+                                                                GLenum attachment,
+                                                                GLenum renderbuffertarget,
+                                                                GLuint renderbuffer);
+typedef void (GLAPIENTRY *PFNGLBINDRENDERBUFFER)               (GLenum target,
+                                                                GLuint renderbuffer);
+typedef void (GLAPIENTRY *PFNGLDELETERENDERBUFFERS)            (GLsizei       n,
+                                                                const GLuint *renderbuffers);
+
 inline void
 glGenFramebuffers (GLsizei n, GLuint* ids)
 {
@@ -96,7 +112,7 @@ glGetShaderiv (GLuint  shader,
 }
 
 inline void
-glDeleteFramebuffers (GLsizei n, GLuint  *framebuffers)
+glDeleteFramebuffers (GLsizei n, const GLuint *framebuffers)
 {
   ((PFNGLDELETEFRAMEBUFFERS)
    glGetProcAddress (glDeleteFramebuffers)) (n, framebuffers);
@@ -389,4 +405,71 @@ glDrawArraysInstanced (GLenum  mode,
      glGetProcAddress (glDrawArraysInstanced);
 
   pfn (mode, first, count, primcount);
+}
+
+inline void
+glGenRenderbuffers (GLsizei n, GLuint *renderbuffers)
+{
+  static PFNGLGENRENDERBUFFERS pfn = NULL;
+
+  if (pfn == NULL)
+   pfn = (PFNGLGENRENDERBUFFERS)
+     glGetProcAddress (glGenRenderbuffersOES);
+
+  pfn (n, renderbuffers);
+}
+
+inline void
+glRenderbufferStorageMultisample (GLenum  target,
+                                  GLsizei samples,
+                                  GLenum  internalformat,
+                                  GLsizei width,
+                                  GLsizei height)
+{
+  static PFNGLRENDERBUFFERSTORAGEMULTISAMPLE pfn = NULL;
+
+  if (pfn == NULL)
+   pfn = (PFNGLRENDERBUFFERSTORAGEMULTISAMPLE)
+     glGetProcAddress (glRenderbufferStorageMultisample);
+
+  pfn (target, samples, internalformat, width, height);
+}
+
+inline void
+glFramebufferRenderbuffer (GLenum target,
+                           GLenum attachment,
+                           GLenum renderbuffertarget,
+                           GLuint renderbuffer)
+{
+  static PFNGLFRAMEBUFFERRENDERBUFFER pfn = NULL;
+
+  if (pfn == NULL)
+   pfn = (PFNGLFRAMEBUFFERRENDERBUFFER)
+     glGetProcAddress (glFramebufferRenderbuffer);
+
+  pfn (target, attachment, renderbuffertarget, renderbuffer);
+}
+
+inline void
+glBindRenderbuffer (GLenum target, GLuint renderbuffer)
+{
+  static PFNGLBINDRENDERBUFFER pfn = NULL;
+
+  if (pfn == NULL)
+   pfn = (PFNGLBINDRENDERBUFFER)
+     glGetProcAddress (glBindRenderbuffer);
+
+  pfn (target, renderbuffer);
+}
+
+inline void
+glDeleteRenderbuffers (GLsizei n, const GLuint *renderbuffers)
+{
+  static PFNGLDELETERENDERBUFFERS pfn = NULL;
+
+  if (pfn == NULL)
+   pfn = (PFNGLDELETERENDERBUFFERS)
+     glGetProcAddress (glDeleteRenderbuffers);
+
+  pfn (n, renderbuffers);
 }
