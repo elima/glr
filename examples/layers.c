@@ -1,9 +1,9 @@
-#include <GL/glfw.h>
 #include <glib.h>
 #include <sys/time.h>
 #include <math.h>
 
 #include "../glr.h"
+#include "utils.h"
 
 #define MSAA_SAMPLES 8
 #define WIDTH   960
@@ -18,34 +18,15 @@ static GlrCanvas *canvas = NULL;
 static GlrLayer *layers[MAX_LAYERS];
 
 static void
-log_times_per_second (const char *msg_format)
-{
-  static unsigned int counter = 0;
-  static time_t last_time = 0;
-  static int interval = 2;
-  time_t cur_time;
-
-  if (last_time == 0)
-    last_time = time (NULL);
-
-  counter++;
-
-  cur_time = time (NULL);
-  if (cur_time >= last_time + interval)
-    {
-      g_print (msg_format, (double) (counter / interval));
-      counter = 0;
-      last_time = cur_time;
-    }
-}
-
-static void
 draw_layer (GlrLayer  *layer,
             guint64    frame,
             guint      layer_index)
 {
   GlrPaint paint;
   gint i, j;
+  guint width, height;
+
+  glr_target_get_size (target, &width, &height);
 
   for (i = 0; i < SCALE; i++)
     for (j = 0; j < SCALE; j++)
@@ -57,10 +38,10 @@ draw_layer (GlrLayer  *layer,
         glr_layer_set_transform_origin (layer, 0.0, 0.0);
         glr_layer_rotate (layer, 0.0 - (frame % 1080) * ((MAX_LAYERS - k)/2.0 + 1.0));
         glr_layer_draw_rounded_rect (layer,
-                                     WIDTH/SCALE * i + k*20,
-                                     WIDTH/SCALE * j,
-                                     30 + WIDTH/SCALE/(k+1),
-                                     30 + HEIGHT/SCALE/(k+1),
+                                     width/SCALE * i + k*20,
+                                     width/SCALE * j,
+                                     30 + width/SCALE/(k+1),
+                                     30 + height/SCALE/(k+1),
                                      5,
                                      &paint);
       }
@@ -68,80 +49,76 @@ draw_layer (GlrLayer  *layer,
   glr_layer_finish (layer);
 }
 
+static void
+draw_func (guint frame, gpointer user_data)
+{
+  GlrPaint paint;
+  gint i;
+
+  /* notify canvas that you want to start drawing for a new frame */
+  glr_canvas_start_frame (canvas);
+
+  glr_paint_set_color (&paint, 127, 127, 127, 255);
+  glr_canvas_clear (canvas, &paint);
+
+  /* create and attach layers */
+  for (i = MAX_LAYERS - 1; i >= 0; i--)
+    {
+      layers[i] = glr_layer_new (context);
+      glr_canvas_attach_layer (canvas, i, layers[i]);
+
+      draw_layer (layers[i], frame, i + 1);
+    }
+
+  /* finally, sync all layers drawings and execute
+     all layers' batched commands */
+  glr_canvas_finish_frame (canvas);
+
+  /* blit canvas' MSAA tex into default FBO */
+  guint current_width, current_height;
+  glr_target_get_size (target, &current_width, &current_height);
+  glBindFramebuffer (GL_FRAMEBUFFER, 0);
+  glBindFramebuffer (GL_READ_FRAMEBUFFER, glr_target_get_framebuffer (target));
+  glBlitFramebuffer (0, 0, current_width, current_height,
+                     0, 0, current_width, current_height,
+                     GL_COLOR_BUFFER_BIT,
+                     GL_NEAREST);
+
+  /* destroy layers */
+  for (i = 0; i < MAX_LAYERS; i++)
+    {
+      glr_layer_unref (layers[i]);
+    }
+}
+
+static void
+resize_func (guint width, guint height, gpointer user_data)
+{
+  glr_target_resize (target, width, height);
+}
+
 gint
 main (int argc, char* argv[])
 {
-  if (glfwInit () == GL_FALSE)
-    {
-      g_printerr ("Could not initialize GLFW. Aborting.\n" );
-      return -1;
-    }
+  /* init windowing system */
+  utils_initialize_x11 (WIDTH, HEIGHT, "Layers");
+  utils_initialize_egl (MSAA_SAMPLES);
 
-  if (glfwOpenWindow (WIDTH, HEIGHT, 8, 8, 8, 8, 24, 8, GLFW_WINDOW) == GL_FALSE)
-    {
-      g_printerr ("Could not open GLFW window. Aborting.\n");
-      return -2;
-    }
-
-  glfwSetWindowTitle ("Layers - glr");
-
+  /* init glr */
   context = glr_context_new ();
   target = glr_target_new (WIDTH, HEIGHT, MSAA_SAMPLES);
   canvas = glr_canvas_new (target);
 
-  glEnable (GL_BLEND);
-
   /* start the show */
-  guint frame = 0;
-  gint i;
-  GlrPaint paint;
+  utils_main_loop (draw_func, resize_func, NULL);
 
-  do
-    {
-      frame++;
-
-      /* notify canvas that you want to start drawing for a new frame */
-      glr_canvas_start_frame (canvas);
-
-      glr_paint_set_color (&paint, 127, 127, 127, 255);
-      glr_canvas_clear (canvas, &paint);
-
-      /* create and attach layers */
-      for (i = MAX_LAYERS - 1; i >= 0; i--)
-        {
-          layers[i] = glr_layer_new (context);
-          glr_canvas_attach_layer (canvas, i, layers[i]);
-
-          draw_layer (layers[i], frame, i + 1);
-        }
-
-      /* finally, sync all layers drawings and execute
-         all layers' batched commands */
-      glr_canvas_finish_frame (canvas);
-
-      /* blit canvas' MSAA tex into default FBO */
-      glBindFramebuffer (GL_FRAMEBUFFER, 0);
-      glBindFramebuffer (GL_READ_FRAMEBUFFER, glr_target_get_framebuffer (target));
-      glBlitFramebuffer (0, 0, WIDTH, HEIGHT,
-                         0, 0, WIDTH, HEIGHT,
-                         GL_COLOR_BUFFER_BIT,
-                         GL_NEAREST);
-
-      log_times_per_second ("FPS: %04f\n");
-      glfwSwapBuffers ();
-
-      /* destroy layers */
-      for (i = 0; i < MAX_LAYERS; i++)
-        {
-          glr_layer_unref (layers[i]);
-        }
-    }
-  while (glfwGetKey (GLFW_KEY_ESC) != GLFW_PRESS && glfwGetWindowParam (GLFW_OPENED));
-
+  /* clean up */
   glr_canvas_unref (canvas);
   glr_target_unref (target);
   glr_context_unref (context);
 
-  glfwTerminate ();
+  utils_finalize_egl ();
+  utils_finalize_x11 ();
+
   return 0;
 }

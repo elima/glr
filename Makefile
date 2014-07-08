@@ -1,4 +1,4 @@
-PKG_CONFIG_LIBS=glib-2.0 freetype2
+PKG_CONFIG_LIBS=glib-2.0 freetype2 egl
 LIBS=-lm -lGL
 CFLAGS=-ggdb -O0 -Wall -shared -fPIC -DCURRENT_DIR=\"`pwd`\"
 

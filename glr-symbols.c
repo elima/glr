@@ -1,9 +1,9 @@
 #include "glr-symbols.h"
 
-#include <GL/glx.h>
+#include <EGL/egl.h>
 
-#define STRINGIFY(x) (const GLubyte *) #x
-#define glGetProcAddress(a) glXGetProcAddress (STRINGIFY (a))
+#define STRINGIFY(x) (const char *) #x
+#define glGetProcAddress(a) eglGetProcAddress (STRINGIFY (a))
 
 typedef void   (GLAPIENTRY *PFNGLGENFRAMEBUFFERS)        (GLsizei  n,
                                                           GLuint  *ids);

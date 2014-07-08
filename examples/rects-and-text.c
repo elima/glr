@@ -1,17 +1,17 @@
-#include <GL/glfw.h>
 #include <glib.h>
 #include <sys/time.h>
 #include <math.h>
 
 #include "../glr.h"
+#include "utils.h"
 
 #define MSAA_SAMPLES 8
 #define WIDTH   960
 #define HEIGHT  960
 
 #define FONT_FILE  (FONTS_DIR "Cantarell-Regular.otf")
-// #define FONT_PATH "./fonts/DejaVuSansMono-Bold.ttf"
-// #define FONT_PATH "./fonts/Ubuntu-Title.ttf"
+// #define FONT_FILE  (FONTS_DIR "DejaVuSansMono-Bold.ttf")
+// #define FONT_FILE  (FONTS_DIR "Ubuntu-Title.ttf")
 
 #define FONT_SIZE 24
 #define SCALE 60
@@ -22,28 +22,6 @@ static GlrCanvas *canvas = NULL;
 static GlrLayer *layer = NULL;
 
 static void
-log_times_per_second (const char *msg_format)
-{
-  static unsigned int counter = 0;
-  static time_t last_time = 0;
-  static int interval = 2;
-  time_t cur_time;
-
-  if (last_time == 0)
-    last_time = time (NULL);
-
-  counter++;
-
-  cur_time = time (NULL);
-  if (cur_time >= last_time + interval)
-    {
-      g_print (msg_format, (double) (counter / interval));
-      counter = 0;
-      last_time = cur_time;
-    }
-}
-
-static void
 draw_layer (GlrLayer  *layer,
             guint64    frame,
             gpointer   user_data)
@@ -52,9 +30,12 @@ draw_layer (GlrLayer  *layer,
   gint scale = SCALE;
   GlrPaint paint;
   GlrFont font = {0};
+  guint width, height;
 
   font.face = FONT_FILE;
   font.face_index = 0;
+
+  glr_target_get_size (target, &width, &height);
 
   for (i = 0; i < scale; i++)
     for (j = 0; j < scale; j++)
@@ -70,8 +51,8 @@ draw_layer (GlrLayer  *layer,
           {
             glr_paint_set_style (&paint, GLR_PAINT_STYLE_FILL);
             glr_layer_draw_rect (layer,
-                                 i * WIDTH/scale, j * HEIGHT/scale,
-                                 WIDTH/scale, HEIGHT/scale,
+                                 i * width/scale, j * height/scale,
+                                 width/scale, height/scale,
                                  &paint);
           }
         else
@@ -83,7 +64,7 @@ draw_layer (GlrLayer  *layer,
             font.size = FONT_SIZE;
             glr_layer_draw_char (layer,
                                  i % scale + 46,
-                                 i * WIDTH/scale - (j%3)*(font.size/2), j * HEIGHT/scale,
+                                 i * width/scale - (j%3)*(font.size/2), j * height/scale,
                                  &font,
                                  &paint);
           }
@@ -94,71 +75,67 @@ draw_layer (GlrLayer  *layer,
   glr_layer_finish (layer);
 }
 
+static void
+draw_func (guint frame, gpointer user_data)
+{
+  GlrPaint paint;
+
+  glr_canvas_start_frame (canvas);
+
+  glr_paint_set_color (&paint, 0, 0, 0, 255);
+  glr_canvas_clear (canvas, &paint);
+
+  /* attach our layer */
+  glr_canvas_attach_layer (canvas, 0, layer);
+
+  /* invalidate layer and draw it */
+  glr_layer_redraw (layer);
+  draw_layer (layer, frame, NULL);
+
+  /* finally, sync all layers and render */
+  glr_canvas_finish_frame (canvas);
+
+  /* blit target's MSAA tex into default FBO */
+  guint current_width, current_height;
+  glr_target_get_size (target, &current_width, &current_height);
+  glBindFramebuffer (GL_FRAMEBUFFER, 0);
+  glBindFramebuffer (GL_READ_FRAMEBUFFER, glr_target_get_framebuffer (target));
+  glBlitFramebuffer (0, 0, current_width, current_height,
+                     0, 0, current_width, current_height,
+                     GL_COLOR_BUFFER_BIT,
+                     GL_NEAREST);
+}
+
+static void
+resize_func (guint width, guint height, gpointer user_data)
+{
+  glr_target_resize (target, width, height);
+}
+
 gint
 main (int argc, char* argv[])
 {
-  if (glfwInit () == GL_FALSE)
-    {
-      g_printerr ("Could not initialize GLFW. Aborting.\n" );
-      return -1;
-    }
+  /* init windowing system */
+  utils_initialize_x11 (WIDTH, HEIGHT, "RectsAndText");
+  utils_initialize_egl (MSAA_SAMPLES);
 
-  if (glfwOpenWindow (WIDTH, HEIGHT, 8, 8, 8, 8, 24, 8, GLFW_WINDOW) == GL_FALSE)
-    {
-      g_printerr ("Could not open GLFW window. Aborting.\n");
-      return -2;
-    }
-
-  glfwSetWindowTitle ("RectsAndText - glr");
-
+  /* init glr */
   context = glr_context_new ();
   target = glr_target_new (WIDTH, HEIGHT, MSAA_SAMPLES);
   canvas = glr_canvas_new (target);
   layer = glr_layer_new (context);
 
-  glEnable (GL_BLEND);
-
   /* start the show */
-  guint frame = 0;
-  GlrPaint paint;
+  utils_main_loop (draw_func, resize_func, NULL);
 
-  do
-    {
-      frame++;
-
-      glr_canvas_start_frame (canvas);
-
-      glr_paint_set_color (&paint, 0, 0, 0, 255);
-      glr_canvas_clear (canvas, &paint);
-
-      /* attach our layer */
-      glr_canvas_attach_layer (canvas, 0, layer);
-
-      /* invalidate layer and draw it */
-      glr_layer_redraw (layer);
-      draw_layer (layer, frame, NULL);
-
-      /* finally, sync all layers and render */
-      glr_canvas_finish_frame (canvas);
-
-      /* blit target's MSAA tex into default FBO */
-      glBindFramebuffer (GL_FRAMEBUFFER, 0);
-      glBindFramebuffer (GL_READ_FRAMEBUFFER, glr_target_get_framebuffer (target));
-      glBlitFramebuffer (0, 0, WIDTH, HEIGHT,
-                         0, 0, WIDTH, HEIGHT,
-                         GL_COLOR_BUFFER_BIT,
-                         GL_NEAREST);
-
-      log_times_per_second ("FPS: %04f\n");
-      glfwSwapBuffers ();
-    }
-  while (glfwGetKey (GLFW_KEY_ESC) != GLFW_PRESS && glfwGetWindowParam (GLFW_OPENED));
-
+  /* clean up */
   glr_layer_unref (layer);
   glr_canvas_unref (canvas);
   glr_target_unref (target);
   glr_context_unref (context);
 
-  glfwTerminate ();
+  utils_finalize_egl ();
+  utils_finalize_x11 ();
+
   return 0;
 }
