@@ -7,7 +7,7 @@ struct _GlrTarget
   gint ref_count;
 
   GLuint fbo;
-  GLuint fbo_tex;
+  GLuint fbo_render_buf;
   guint8 msaa_samples;
   guint32 width;
   guint32 height;
@@ -16,7 +16,7 @@ struct _GlrTarget
 static void
 glr_target_free (GlrTarget *self)
 {
-  glDeleteTextures (1, &self->fbo_tex);
+  glDeleteRenderbuffers (1, &self->fbo_render_buf);
   glDeleteFramebuffers (1, &self->fbo);
 
   g_slice_free (GlrTarget, self);
@@ -39,21 +39,28 @@ glr_target_new (guint32 width, guint32 height, guint8 msaa_samples)
 
   glEnable (GL_MULTISAMPLE);
 
-  glGenTextures (1, &self->fbo_tex);
-  glBindTexture (GL_TEXTURE_2D_MULTISAMPLE, self->fbo_tex);
-  glTexImage2DMultisample (GL_TEXTURE_2D_MULTISAMPLE,
-                           self->msaa_samples,
-                           GL_RGBA8,
-                           self->width, self->height,
-                           FALSE);
+  glGenRenderbuffers (1, &self->fbo_render_buf);
+  glBindRenderbuffer (GL_RENDERBUFFER, self->fbo_render_buf);
+  glRenderbufferStorageMultisample (GL_RENDERBUFFER,
+                                    self->msaa_samples,
+                                    GL_RGBA8,
+                                    self->width,
+                                    self->height);
 
   glGenFramebuffers (1, &self->fbo);
   glBindFramebuffer (GL_FRAMEBUFFER, self->fbo);
-  glFramebufferTexture2D (GL_FRAMEBUFFER,
-                          GL_COLOR_ATTACHMENT0,
-                          GL_TEXTURE_2D_MULTISAMPLE,
-                          self->fbo_tex,
-                          0);
+
+  glFramebufferRenderbuffer (GL_FRAMEBUFFER,
+                             GL_COLOR_ATTACHMENT0,
+                             GL_RENDERBUFFER,
+                             self->fbo_render_buf);
+
+  if (glCheckFramebufferStatus (GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+      g_printerr ("Failed to create a working framebuffer\n");
+      return NULL;
+    }
+
   glBindFramebuffer (GL_FRAMEBUFFER, 0);
 
   return self;
@@ -96,8 +103,16 @@ glr_target_get_framebuffer (GlrTarget *self)
   return self->fbo;
 }
 
-GLuint
-glr_target_get_texture (GlrTarget *self)
+void
+glr_target_resize (GlrTarget *self, guint width, guint height)
 {
-  return self->fbo_tex;
+  self->width = width;
+  self->height = height;
+
+  glBindRenderbuffer (GL_RENDERBUFFER, self->fbo_render_buf);
+  glRenderbufferStorageMultisample (GL_RENDERBUFFER,
+                                    self->msaa_samples,
+                                    GL_RGBA8,
+                                    self->width,
+                                    self->height);
 }

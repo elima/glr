@@ -15,11 +15,13 @@ GlrTarget *     glr_target_ref             (GlrTarget *self);
 void            glr_target_unref           (GlrTarget *self);
 
 GLuint          glr_target_get_framebuffer (GlrTarget *self);
-GLuint          glr_target_get_texture     (GlrTarget *self);
 
 void            glr_target_get_size        (GlrTarget *self,
                                             guint32   *width,
                                             guint32   *height);
+void            glr_target_resize          (GlrTarget *self,
+                                            guint      width,
+                                            guint      height);
 
 G_END_DECLS
 
