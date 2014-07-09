@@ -170,6 +170,14 @@ initialize_frame_if_needed (GlrCanvas *self)
 
   glUniform1ui (self->width_loc, width);
   glUniform1ui (self->height_loc, height);
+
+  glActiveTexture (GL_TEXTURE1);
+  /* @FIXME: get the glyph texture id from texture cache, instead of hardcoding it here */
+  glBindTexture (GL_TEXTURE_2D, 1);
+  /* bind the texture cache texture */
+  GLuint tex_loc;
+  tex_loc = glGetUniformLocation (self->shader_program, "glyph_cache");
+  glUniform1i (tex_loc, 1);
 }
 
 static void
@@ -240,7 +248,6 @@ glr_canvas_new (GlrTarget *target)
   self->target = target;
 
   /* @FIXME: load the shader sources at compile time */
-
   if (! g_file_get_contents (CURRENT_DIR "/vertex.glsl",
                              &vertex_src,
                              NULL,
@@ -284,13 +291,8 @@ glr_canvas_new (GlrTarget *target)
   glUseProgram (self->shader_program);
 
   // get uniform locations
-  self->width_loc = glGetUniformLocation (self->shader_program, "width");
-  self->height_loc = glGetUniformLocation (self->shader_program, "height");
-
-  /* @FIXME: this is for font atlas, move it out of here */
-  GLuint tex_loc;
-  tex_loc = glGetUniformLocation (self->shader_program, "atlas");
-  glUniform1i (tex_loc, 4);
+  self->width_loc = glGetUniformLocation (self->shader_program, "canvas_width");
+  self->height_loc = glGetUniformLocation (self->shader_program, "canvas_height");
 
   // transform buffer
   glEnable (GL_TEXTURE_2D);

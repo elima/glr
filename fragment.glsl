@@ -1,40 +1,42 @@
 #version 300 es
 
-const int BACKGROUND_COLOR   = 0;
-const int BACKGROUND_TEXTURE = 1;
+const int BACKGROUND_COLOR     = 0;
+const int BACKGROUND_GLYPH_TEX = 1;
+const int BACKGROUND_IMAGE_TEX = 2;
 
-uniform sampler2D atlas;
-// uniform usampler2D atlas;
+uniform sampler2D glyph_cache;
 
 in mediump vec4 color;
-flat in uvec4 area_in_atlas;
+flat in highp vec4 area_in_tex;
 in mediump vec4 tex_coord;
 flat in int background_type;
 out mediump vec4 my_FragColor;
 
 void main()
 {
-  if (background_type == BACKGROUND_TEXTURE)
+  mediump vec4 col = color;
+
+  if (background_type == BACKGROUND_GLYPH_TEX)
     {
-      int width = int (area_in_atlas.z);
-      int height = int (area_in_atlas.w);
-
-      int x, y;
-      x = int (area_in_atlas.x) * 4 + int (int (tex_coord.s) * width * 3);
-      y = int (area_in_atlas.y) + int (int (tex_coord.t) * height);
-
+      // font glyph
       mediump float f = 0.0;
-
-      // uvec4 a = texelFetch (atlas, ivec2 (x / 4, y), 0);
-      mediump vec4 a = texture2D (atlas, vec2 (float (x) / 4.0 / 1024.0, float (y) / 4096.0));
-
-      // f = float (a.r) / 255.0;
+      mediump vec4 a = texture2D (glyph_cache,
+                                  vec2 (area_in_tex.x + tex_coord.s * area_in_tex.z,
+                                        area_in_tex.y + tex_coord.t * area_in_tex.w));
       f = a.r;
+      if (f == 0.0)
+        discard;
 
-      my_FragColor = vec4 (color.rgb, color.a * f);
+      my_FragColor = vec4 (col.rgb, col.a * f);
+    }
+  else if (background_type == BACKGROUND_COLOR)
+    {
+      // flat color
+      my_FragColor = color;
     }
   else
     {
-      my_FragColor = color;
+      // image texture
+      // @TODO: not yet implemented
     }
 }

@@ -9,7 +9,7 @@
 
 #define MAX_TEXTURES 4
 
-#define ATLAS_WIDTH  1024
+#define ATLAS_WIDTH  2048
 #define ATLAS_HEIGHT 4096
 
 struct _GlrTexCache
@@ -100,6 +100,65 @@ load_font_face (GlrTexCache *self,
   return face;
 }
 
+static TexColumn *
+find_empty_area (GlrTexCache *self,
+                 guint        width,
+                 guint        height,
+                 gboolean     only_alpha)
+{
+  GList *node;
+  TexColumn *column = NULL;
+
+  if (width > ATLAS_WIDTH || height > ATLAS_HEIGHT)
+    return NULL;
+
+  node = self->columns;
+  while (node != NULL && node->next != NULL)
+    {
+      column = node->data;
+      if (column->width >= width && ATLAS_HEIGHT - column->first_y >= height)
+        break;
+
+      node = g_list_next (node);
+      column = NULL;
+    }
+
+  if (column != NULL)
+    return column;
+
+  /* need to create a new column */
+  node = g_list_last (self->columns);
+  if (node == NULL)
+    {
+      /* there is no columns defined yet, create a new one */
+      column = g_new0 (TexColumn, 1);
+      column->x = 0;
+      column->width = width;
+      column->first_y = 0;
+
+      self->columns = g_list_append (self->columns, column);
+    }
+  else
+    {
+      TexColumn *new_column;
+
+      column = node->data;
+      if (ATLAS_WIDTH - column->x < width)
+        return NULL;
+
+      new_column = g_new0 (TexColumn, 1);
+      new_column->x = column->x + column->width;
+      new_column->width = width;
+      new_column->first_y = 0;
+
+      self->columns = g_list_append (self->columns, new_column);
+
+      return new_column;
+    }
+
+  return column;
+}
+
 /* public API */
 
 GlrTexCache *
@@ -125,25 +184,31 @@ glr_tex_cache_new (void)
   glGetIntegerv (GL_MAX_TEXTURE_SIZE, &max_texture_size);
   // g_print ("%d\n", max_texture_size);
 
+  glEnable (GL_BLEND);
+
   /* create the font glyph texture */
+  self->aux_buf = g_slice_alloc (ATLAS_WIDTH * ATLAS_HEIGHT);
+
   glEnable (GL_TEXTURE_2D);
+  glActiveTexture (GL_TEXTURE1);
   glGenTextures (1, &self->glyph_tex);
+  // g_print ("%u\n", self->glyph_tex);
   glBindTexture (GL_TEXTURE_2D, self->glyph_tex);
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  // glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
+
+  memset (self->aux_buf, 0x00, ATLAS_WIDTH * ATLAS_HEIGHT);
   glTexImage2D (GL_TEXTURE_2D,
                 0,
-                GL_R32F,
+                GL_R8,
                 ATLAS_WIDTH, ATLAS_HEIGHT,
                 0,
                 GL_RED,
-                GL_FLOAT,
-                NULL);
-
-  self->aux_buf = g_slice_alloc (ATLAS_WIDTH * ATLAS_HEIGHT);
+                GL_UNSIGNED_BYTE,
+                self->aux_buf);
 
   return self;
 }
@@ -167,66 +232,6 @@ glr_tex_cache_unref (GlrTexCache *self)
 
   if (g_atomic_int_dec_and_test (&self->ref_count))
     glr_tex_cache_free (self);
-}
-
-static TexColumn *
-find_empty_area (GlrTexCache *self,
-                 guint        width,
-                 guint        height,
-                 gboolean     only_alpha)
-{
-  GList *node;
-  TexColumn *column = NULL;
-
-  if (width > ATLAS_WIDTH || height > ATLAS_HEIGHT)
-    return NULL;
-
-  node = self->columns;
-  while (node != NULL && node->next != NULL)
-    {
-      column = node->data;
-      if (column->width >= width && ATLAS_HEIGHT - column->first_y >= height)
-        break;
-
-      node = g_list_next (node);
-    }
-
-  if (column != NULL)
-    return column;
-
-  /* need to create a new column */
-  node = g_list_last (self->columns);
-  if (node == NULL)
-    {
-      /* there is no columns defined yet, create a new one */
-      column = g_new0 (TexColumn, 1);
-      column->x = 0;
-      column->width = width;
-      column->first_y = 0;
-
-      // g_print ("new column inserted\n");
-      self->columns = g_list_append (self->columns, column);
-    }
-  else
-    {
-      TexColumn *new_column;
-
-      column = node->data;
-      if (ATLAS_WIDTH - column->x < width)
-        return NULL;
-
-      new_column = g_new0 (TexColumn, 1);
-      new_column->x = column->x + column->width;
-      new_column->width = width;
-      new_column->first_y = 0;
-
-      // g_print ("new column inserted after another\n");
-      self->columns = g_list_append (self->columns, new_column);
-
-      return new_column;
-    }
-
-  return column;
 }
 
 const GlrTexSurface *
@@ -285,9 +290,7 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
   glyph_index = FT_Get_Char_Index (face, unicode_char);
 
   // load glyph
-  err = FT_Load_Glyph (face,          /* handle to face object */
-                       glyph_index,   /* glyph index           */
-                       FT_LOAD_NO_BITMAP);
+  err = FT_Load_Glyph (face, glyph_index, FT_LOAD_NO_BITMAP);
   if (err != 0)
     {
       g_printerr ("Error loading glyph: %d\n", err);
@@ -297,8 +300,7 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
   // render glyph if it is not embedded bitmap
   if (face->glyph->format != FT_GLYPH_FORMAT_BITMAP)
     {
-      err = FT_Render_Glyph (face->glyph,         // glyph slot
-                             FT_RENDER_MODE_LCD); // render mode
+      err = FT_Render_Glyph (face->glyph, FT_RENDER_MODE_LCD);
       if (err != 0)
         {
           g_printerr ("Error rendering glyph: %d\n", err);
@@ -325,7 +327,7 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
   gsize stride = MAX (1, (gsize) ceil (bmp.pitch / 4.0)) * 4;
 
   // g_print ("stride: %u\n", stride);
-  // g_print ("width: %u\n", bmp.width);
+  // g_print ("width: %u\n", bmp.pitch);
 
   if (bmp.pitch % 4 != 0)
     {
@@ -344,32 +346,30 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
   // FT_Done_Glyph (glyph);
 
   /* upload glyph bitmap to texture */
-  TexColumn *column = find_empty_area (self, stride / 4, bmp.rows, TRUE);
+  TexColumn *column = find_empty_area (self, stride, bmp.rows, TRUE);
   if (column == NULL)
     {
       /* @FIXME: no space found for the new glyph,
          we need a flushing mechanism */
-      g_printerr ("Out of space in the texture cache");
-
-      return NULL;
+      g_printerr ("Out of space in the texture cache\n");
+      goto out;
     }
 
-  glActiveTexture (GL_TEXTURE4);
+  glActiveTexture (GL_TEXTURE1);
   glBindTexture (GL_TEXTURE_2D, self->glyph_tex);
   glTexSubImage2D (GL_TEXTURE_2D,
                    0,
                    column->x + 1, column->first_y + 1,
-                   stride / 4,
+                   stride,
                    bmp.rows,
                    GL_RED,
-                   GL_FLOAT,
+                   GL_UNSIGNED_BYTE,
                    self->aux_buf);
-  glFlush ();
 
   surface = g_slice_new (GlrTexSurface);
   surface->tex_id = self->glyph_tex;
   surface->left = column->x + 1;
-  surface->top = column->first_y + 1;
+  surface->top =  column->first_y + 1;
   surface->width = bmp.width;
   surface->height = bmp.rows;
 

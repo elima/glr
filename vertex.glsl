@@ -1,46 +1,56 @@
 #version 300 es
 
-// const float PI = 3.1415926535897932384626433832795;
-const int TRANSFORM_TEX_WIDTH  = int (1024);
-const int TRANSFORM_TEX_HEIGHT = int (512);
+const uint TRANSFORM_TEX_WIDTH  = uint (1024);
+const uint TRANSFORM_TEX_HEIGHT = uint ( 512);
+
+const mediump float GLYPH_TEX_WIDTH  = 2048.0;
+const mediump float GLYPH_TEX_HEIGHT = 4096.0;
 
 const uint MASK_8_BIT = uint (0x000000FF);
 
-const int BACKGROUND_COLOR   = 0;
-const int BACKGROUND_TEXTURE = 1;
+const int BACKGROUND_COLOR     = 0;
+const int BACKGROUND_GLYPH_TEX = 1;
+const int BACKGROUND_IMAGE_TEX = 2;
 
-uniform uint width;
-uniform uint height;
+uniform uint canvas_width;
+uniform uint canvas_height;
 
 uniform sampler2D transform_buffer;
 
-layout(location = 0) in vec4 vertex;
-layout(location = 1) in vec4 lyt;
-layout(location = 2) in uint col;
-layout(location = 3) in uvec2 config;
-layout(location = 4) in uint tex_area;
+layout (location = 0) in vec4 vertex;
+layout (location = 1) in vec4 lyt;
+layout (location = 2) in uint col;
+layout (location = 3) in uvec2 config;
+layout (location = 4) in uint tex_area;
 
 out vec4 color;
-flat out uvec4 area_in_atlas;
+flat out highp vec4 area_in_tex;
 out vec4 tex_coord;
 flat out int background_type;
 
+vec4
+apply_layout (vec4 vertice, vec4 lyt)
+{
+  mat4 st = mat4 (
+    lyt.z * 2.0,            0.0, 0.0, -1.0 + lyt.x * 2.0,
+            0.0, -(lyt.w * 2.0), 0.0,  1.0 - lyt.y * 2.0,
+            0.0,            0.0, 2.0,                0.0,
+            0.0,            0.0, 0.0,                1.0
+  );
+
+  return vertice * st;
+}
+
 void main()
 {
-  float aspect_ratio_inv = float (height) / float (width);
+  float aspect_ratio_inv = float (canvas_height) / float (canvas_width);
   float step;
 
   // load layout
-  vec4 l = vec4 (lyt.x / float (width),
-                 lyt.y / float (height),
-                 lyt.z / float (width),
-                 lyt.w / float (height));
-  mat4 st = mat4 (
-    l.z * 2.0,          0.0, 0.0, -1.0 + l.x * 2.0,
-          0.0, -(l.w * 2.0), 0.0,  1.0 - l.y * 2.0,
-          0.0,          0.0, 2.0,              0.0,
-          0.0,          0.0, 0.0,              1.0
-  );
+  vec4 l = vec4 (lyt.x / float (canvas_width),
+                 lyt.y / float (canvas_height),
+                 lyt.z / float (canvas_width),
+                 lyt.w / float (canvas_height));
 
   vec4 pos = vec4 (vertex.xy, 0.0, 1.0);
 
@@ -51,12 +61,12 @@ void main()
       float step_x = 1.0 / float (TRANSFORM_TEX_WIDTH);
       float step_y = 1.0 / float (TRANSFORM_TEX_HEIGHT);
 
-      int offset = int (transform_index) - 1;
-      int column = offset % TRANSFORM_TEX_WIDTH;
-      int row = offset / TRANSFORM_TEX_WIDTH;
+      uint offset = transform_index - uint (1);
+      float column = float (offset % TRANSFORM_TEX_WIDTH);
+      float row = float (offset / TRANSFORM_TEX_WIDTH);
 
-      vec2 transform1_pos = vec2 (float (column) * step_x, float (row) * step_y);
-      vec2 transform2_pos = vec2 (float (column + 1) * step_x, float (row) * step_y);
+      vec2 transform1_pos = vec2 (column * step_x, row * step_y);
+      vec2 transform2_pos = vec2 ((column + 1.0) * step_x, row * step_y);
       vec4 transform1 = texture (transform_buffer, transform1_pos);
       vec4 transform2 = texture (transform_buffer, transform2_pos);
 
@@ -83,13 +93,7 @@ void main()
                  0.0, 0.0, 1.0, 0.0,
                  0.0, 0.0, 0.0, 1.0
       );
-      // window_scale_inv = inverse (window_scale);
-      window_scale_inv = mat4 (
-        1.0 / aspect_ratio, 0.0, 0.0, 0.0,
-                       0.0, 1.0, 0.0, 0.0,
-                       0.0, 0.0, 1.0, 0.0,
-                       0.0, 0.0, 0.0, 1.0
-      );
+      window_scale_inv = inverse (window_scale);
 
       object_scale = mat4 (
           scale_x,     0.0, 0.0, 0.0,
@@ -97,13 +101,7 @@ void main()
               0.0,     0.0, 1.0, 0.0,
               0.0,     0.0, 0.0, 1.0
       );
-      // object_scale_inv = inverse (object_scale);
-      object_scale_inv = mat4 (
-          1.0/scale_x,         0.0, 0.0, 0.0,
-                  0.0, 1.0/scale_y, 0.0, 0.0,
-                  0.0,         0.0, 1.0, 0.0,
-                  0.0,         0.0, 0.0, 1.0
-      );
+      object_scale_inv = inverse (object_scale);
 
       translate = mat4 (
         1.0, 0.0, 0.0, -origin_x,
@@ -111,13 +109,7 @@ void main()
         0.0, 0.0, 1.0,       0.0,
         0.0, 0.0, 0.0,       1.0
       );
-      // translate_inv = inverse (translate);
-      translate_inv = mat4 (
-        1.0, 0.0, 0.0, origin_x,
-        0.0, 1.0, 0.0, origin_y,
-        0.0, 0.0, 1.0,      0.0,
-        0.0, 0.0, 0.0,      1.0
-      );
+      translate_inv = inverse (translate);
 
       if (rotation_z != 0.0)
         {
@@ -146,16 +138,9 @@ void main()
         0.0, 0.0, 1.0,              0.0,
         0.0, 0.0, 0.0,              1.0
       );
-      // parent_translate_inv = inverse (parent_translate);
-      parent_translate_inv = mat4 (
-        1.0, 0.0, 0.0, parent_origin_x,
-        0.0, 1.0, 0.0, parent_origin_y,
-        0.0, 0.0, 1.0,             0.0,
-        0.0, 0.0, 0.0,             1.0
-      );
+      parent_translate_inv = inverse (parent_translate);
 
       pos = pos * object_scale_inv * parent_translate;
-
       if (parent_rotation_z != 0.0)
         {
           rotation = mat4 (
@@ -166,14 +151,11 @@ void main()
           );
           pos = rotation * pos;
         }
-
       pos = pos * object_scale * parent_translate_inv;
     }
 
   // apply layout
-  pos *= st;
-
-  gl_Position = pos;
+  gl_Position = apply_layout (pos, l);
 
   // resolve background
   uint background_config = config.x;
@@ -186,12 +168,17 @@ void main()
                 float ((col >>  8) & MASK_8_BIT) / 255.0,
                 float ( col        & MASK_8_BIT) / 255.0);
 
-  if (background_type == BACKGROUND_TEXTURE)
+  if (background_type == BACKGROUND_GLYPH_TEX || background_type == BACKGROUND_IMAGE_TEX)
     {
       tex_coord = vec4 (vertex.xy, 0.0, 1.0);
 
+      // x and y offset in texture is encoded in 16 bits each
       uint tex_area_left = (tex_area >> 16) & uint (0xFFFF);
       uint tex_area_top = tex_area & uint (0xFFFF);
-      area_in_atlas = uvec4 (tex_area_left, tex_area_top, lyt.z, lyt.w);
+
+      area_in_tex = vec4 (float (tex_area_left) / GLYPH_TEX_WIDTH,
+                          float (tex_area_top) / GLYPH_TEX_HEIGHT,
+                          float (lyt.z) * 3.0 / GLYPH_TEX_WIDTH,
+                          float (lyt.w) / GLYPH_TEX_HEIGHT);
     }
 }
