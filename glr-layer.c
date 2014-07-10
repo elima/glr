@@ -476,6 +476,11 @@ glr_layer_draw_char (GlrLayer *self,
                                              font->face_index,
                                              font->size,
                                              unicode_char);
+  if (surface == NULL)
+    {
+      /* @FIXME: implement command breaking */
+      return;
+    }
 
   layout.left = left + self->translate_x;
   layout.top = top + self->translate_y;

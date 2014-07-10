@@ -7,7 +7,7 @@ const int BACKGROUND_IMAGE_TEX = 2;
 uniform sampler2D glyph_cache;
 
 in mediump vec4 color;
-flat in highp vec4 area_in_tex;
+flat in mediump vec4 area_in_tex;
 in mediump vec4 tex_coord;
 flat in int background_type;
 out mediump vec4 my_FragColor;
