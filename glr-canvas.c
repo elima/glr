@@ -171,13 +171,17 @@ initialize_frame_if_needed (GlrCanvas *self)
   glUniform1ui (self->width_loc, width);
   glUniform1ui (self->height_loc, height);
 
-  glActiveTexture (GL_TEXTURE1);
   /* @FIXME: get the glyph texture id from texture cache, instead of hardcoding it here */
-  glBindTexture (GL_TEXTURE_2D, 1);
-  /* bind the texture cache texture */
-  GLuint tex_loc;
-  tex_loc = glGetUniformLocation (self->shader_program, "glyph_cache");
-  glUniform1i (tex_loc, 1);
+  gint i;
+  for (i = 0; i < 8; i++)
+    {
+      GLuint loc;
+      gchar *st;
+
+      st = g_strdup_printf ("glyph_cache[%d]", i);
+      loc = glGetUniformLocation (self->shader_program, st);
+      glUniform1i (loc, i);
+    }
 }
 
 static void
@@ -196,7 +200,7 @@ flush (GlrCanvas *self)
   initialize_frame_if_needed (self);
 
   /* bind the transform buffer texture */
-  glActiveTexture (GL_TEXTURE3);
+  glActiveTexture (GL_TEXTURE8);
   glBindTexture (GL_TEXTURE_2D, self->transform_buffer_tex);
 
   g_mutex_lock (&self->layers_mutex);
@@ -297,7 +301,7 @@ glr_canvas_new (GlrTarget *target)
   // transform buffer
   glEnable (GL_TEXTURE_2D);
   glGenTextures (1, &self->transform_buffer_tex);
-  glActiveTexture (GL_TEXTURE3);
+  glActiveTexture (GL_TEXTURE8);
   glBindTexture (GL_TEXTURE_2D, self->transform_buffer_tex);
   glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
@@ -313,7 +317,7 @@ glr_canvas_new (GlrTarget *target)
                 NULL);
   transform_buffer_loc = glGetUniformLocation (self->shader_program,
                                                "transform_buffer");
-  glUniform1i (transform_buffer_loc, 3);
+  glUniform1i (transform_buffer_loc, 8);
 
   /* layers */
   g_mutex_init (&self->layers_mutex);

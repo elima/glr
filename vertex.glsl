@@ -3,7 +3,7 @@
 const uint TRANSFORM_TEX_WIDTH  = uint (1024);
 const uint TRANSFORM_TEX_HEIGHT = uint ( 512);
 
-const mediump float GLYPH_TEX_WIDTH  = 2048.0;
+const mediump float GLYPH_TEX_WIDTH  = 1024.0;
 const mediump float GLYPH_TEX_HEIGHT = 4096.0;
 
 const uint MASK_8_BIT = uint (0x000000FF);
@@ -25,6 +25,7 @@ layout (location = 4) in uint tex_area;
 
 out vec4 color;
 flat out highp vec4 area_in_tex;
+flat out int tex_id;
 out vec4 tex_coord;
 flat out int background_type;
 
@@ -175,6 +176,9 @@ void main()
       // x and y offset in texture is encoded in 16 bits each
       uint tex_area_left = (tex_area >> 16) & uint (0xFFFF);
       uint tex_area_top = tex_area & uint (0xFFFF);
+
+      // bits 25 to 28 in config encode the texture id
+      tex_id = int (config >> 25) & 0x0F;
 
       area_in_tex = vec4 (float (tex_area_left) / GLYPH_TEX_WIDTH,
                           float (tex_area_top) / GLYPH_TEX_HEIGHT,

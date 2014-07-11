@@ -222,6 +222,9 @@ glr_command_add_instance (GlrCommand          *self,
 
       /* first config word (32bits) stores background type (3bits) */
       config1 = (GLR_BACKGROUND_TEXTURE << 29);
+
+      /* bits 25 to 28 encode texutre id */
+      config1 |= (tex_surface->tex_id << 25);
     }
   else
     {
@@ -301,7 +304,6 @@ glr_command_draw (GlrCommand *self, GLuint shader_program)
   glVertexAttribDivisor (TEX_AREA_ATTR, 1);
 
   /* upload transform data */
-  glActiveTexture (GL_TEXTURE3);
   tex_height = MAX ((GLsizei) ceil ((self->transform_buffer_count * 1.0) / TRANSFORM_TEX_WIDTH), 1);
   glTexSubImage2D (GL_TEXTURE_2D,
                    0,

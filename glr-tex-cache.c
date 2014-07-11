@@ -7,9 +7,9 @@
 #include FT_MODULE_H
 #include <math.h>
 
-#define MAX_TEXTURES 4
+#define MAX_GLYPH_TEXTURES 8
 
-#define GLYPH_TEX_WIDTH  2048
+#define GLYPH_TEX_WIDTH  1024
 #define GLYPH_TEX_HEIGHT 4096
 
 typedef struct
@@ -17,7 +17,16 @@ typedef struct
   guint x;
   guint width;
   guint first_y;
+  GLuint tex_id;
+  guint tex_index;
 } TexColumn;
+
+typedef struct
+{
+  GLuint id;
+  GList *columns;
+  TexColumn *right_most_column;
+} Texture;
 
 struct _GlrTexCache
 {
@@ -27,27 +36,28 @@ struct _GlrTexCache
   GHashTable *font_entries;
   GHashTable *font_faces;
 
-  GLuint glyph_tex;
-
-  GList *columns;
-  TexColumn *right_most_column;
-
-  guint8 *aux_buf;
+  Texture glyph_texs[MAX_GLYPH_TEXTURES];
+  guint num_glyph_texs;
+  guint current_glyph_tex;
 };
 
 static void
 glr_tex_cache_free (GlrTexCache *self)
 {
-  g_slice_free1 (GLYPH_TEX_WIDTH * GLYPH_TEX_HEIGHT, self->aux_buf);
+  gint i;
 
   g_hash_table_unref (self->font_faces);
   g_hash_table_unref (self->font_entries);
 
   FT_Done_Library (self->ft_lib);
 
-  glDeleteTextures (1, &self->glyph_tex);
+  for (i = 0; i < self->num_glyph_texs; i++)
+    {
+      Texture *tex = &self->glyph_texs[i];
 
-  g_list_free_full (self->columns, g_free);
+      glDeleteTextures (1, &tex->id);
+      g_list_free_full (tex->columns, g_free);
+    }
 
   g_slice_free (GlrTexCache, self);
   self = NULL;
@@ -115,64 +125,122 @@ compare_column_widths (gconstpointer a, gconstpointer b)
     return 0;
 }
 
+static Texture *
+allocate_new_glyph_texture (GlrTexCache *self)
+{
+  Texture *tex;
+
+  if (self->num_glyph_texs == MAX_GLYPH_TEXTURES)
+    return NULL;
+
+  tex = &self->glyph_texs[self->num_glyph_texs];
+  self->num_glyph_texs++;
+
+  tex->columns = NULL;
+  tex->right_most_column = NULL;
+
+  glActiveTexture (GL_TEXTURE0 + self->num_glyph_texs - 1);
+  glGenTextures (1, &tex->id);
+  glBindTexture (GL_TEXTURE_2D, tex->id);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexImage2D (GL_TEXTURE_2D,
+                0,
+                GL_R8,
+                GLYPH_TEX_WIDTH, GLYPH_TEX_HEIGHT,
+                0,
+                GL_RED,
+                GL_UNSIGNED_BYTE,
+                NULL);
+
+  return tex;
+}
+
 static TexColumn *
-find_empty_area (GlrTexCache *self,
-                 guint        width,
-                 guint        height,
-                 gboolean     only_alpha)
+find_surface_for_glyph (GlrTexCache *self,
+                        guint        width,
+                        guint        height)
 {
   GList *node;
   TexColumn *column = NULL;
+  gint i;
+  GlrTexSurface *surface = NULL;
+  Texture *tex;
 
   if (width >= GLYPH_TEX_WIDTH || height >= GLYPH_TEX_HEIGHT)
     return NULL;
 
-  /* look for an existing column that has enough space left at the bottom */
-  node = self->columns;
-  while (node != NULL)
+  for (i = 0; i < MAX_GLYPH_TEXTURES; i++)
     {
-      column = node->data;
-      if (column->width >= width && GLYPH_TEX_HEIGHT - column->first_y >= height)
-        break;
+      if (i == self->num_glyph_texs)
+        tex = allocate_new_glyph_texture (self);
+      else
+        tex = &self->glyph_texs[i];
 
-      node = g_list_next (node);
-      column = NULL;
-    }
-
-  if (column != NULL)
-    return column;
-
-  /* need to create a new column */
-  node = g_list_last (self->columns);
-  if (node == NULL)
-    {
-      /* there is no columns defined yet, create a new one */
-      column = g_new0 (TexColumn, 1);
-      column->x = 0;
-      column->width = width;
-      column->first_y = 0;
-
-      self->columns = g_list_insert_sorted (self->columns,
-                                            column,
-                                            compare_column_widths);
-    }
-  else
-    {
-      TexColumn *new_column;
-
-      g_assert (self->right_most_column != NULL);
-      if (GLYPH_TEX_WIDTH - (self->right_most_column->x + self->right_most_column->width) < width)
+      if (tex == NULL)
         return NULL;
 
-      new_column = g_new0 (TexColumn, 1);
-      new_column->x = self->right_most_column->x + self->right_most_column->width;
-      new_column->width = width;
-      new_column->first_y = 0;
+      /* look for an existing column that has enough space left at the bottom */
+      node = tex->columns;
+      while (node != NULL)
+        {
+          column = node->data;
+          if (column->width >= width && GLYPH_TEX_HEIGHT - column->first_y >= height)
+            break;
 
-      self->columns = g_list_insert_sorted (self->columns,
-                                            new_column,
-                                            compare_column_widths);
-      return new_column;
+          node = g_list_next (node);
+          column = NULL;
+        }
+
+      if (column == NULL)
+        {
+          /* need to create a new column */
+          node = g_list_last (tex->columns);
+          if (node == NULL)
+            {
+              /* there is no columns defined yet, create a new one */
+              column = g_new0 (TexColumn, 1);
+              column->x = 0;
+              column->width = width;
+              column->first_y = 0;
+              column->tex_id = tex->id;
+              column->tex_index = i;
+
+              tex->columns = g_list_insert_sorted (tex->columns,
+                                                   column,
+                                                   compare_column_widths);
+            }
+          else
+            {
+              g_assert (tex->right_most_column != NULL);
+              if (GLYPH_TEX_WIDTH - (tex->right_most_column->x + tex->right_most_column->width) < width)
+                continue;
+
+              column = g_new0 (TexColumn, 1);
+              column->x = tex->right_most_column->x + tex->right_most_column->width;
+              column->width = width;
+              column->first_y = 0;
+              column->tex_id = tex->id;
+              column->tex_index = i;
+
+              tex->columns = g_list_insert_sorted (tex->columns,
+                                                   column,
+                                                   compare_column_widths);
+            }
+        }
+
+      if (column != NULL)
+        {
+          if (tex->right_most_column == NULL ||
+              column->x + column->width + 1 > tex->right_most_column->x + tex->right_most_column->width)
+            {
+              tex->right_most_column = column;
+            }
+
+          break;
+        }
     }
 
   return column;
@@ -187,8 +255,6 @@ glr_tex_cache_new (void)
 
   self = g_slice_new0 (GlrTexCache);
   self->ref_count = 1;
-
-  self->right_most_column = NULL;
 
   self->font_entries =
     g_hash_table_new_full (g_str_hash,
@@ -206,30 +272,7 @@ glr_tex_cache_new (void)
   // g_print ("%d\n", max_texture_size);
 
   glEnable (GL_BLEND);
-
-  /* create the font glyph texture */
-  self->aux_buf = g_slice_alloc (GLYPH_TEX_WIDTH * GLYPH_TEX_HEIGHT);
-
   glEnable (GL_TEXTURE_2D);
-  glActiveTexture (GL_TEXTURE1);
-  glGenTextures (1, &self->glyph_tex);
-  // g_print ("%u\n", self->glyph_tex);
-  glBindTexture (GL_TEXTURE_2D, self->glyph_tex);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  // glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
-
-  memset (self->aux_buf, 0x00, GLYPH_TEX_WIDTH * GLYPH_TEX_HEIGHT);
-  glTexImage2D (GL_TEXTURE_2D,
-                0,
-                GL_R8,
-                GLYPH_TEX_WIDTH, GLYPH_TEX_HEIGHT,
-                0,
-                GL_RED,
-                GL_UNSIGNED_BYTE,
-                self->aux_buf);
 
   return self;
 }
@@ -331,17 +374,17 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
 
   /* upload glyph bitmap to texture */
   FT_Bitmap bmp = face->glyph->bitmap;
-  TexColumn *column = find_empty_area (self, bmp.width + 1, bmp.rows + 1, TRUE);
+  TexColumn *column = find_surface_for_glyph (self, bmp.width + 1, bmp.rows + 1);
   if (column == NULL)
     {
       /* @FIXME: no space found for the new glyph,
          we need a flushing mechanism */
-      // g_printerr ("Out of space in the texture cache\n");
+      g_printerr ("Out of space in the texture cache\n");
       goto out;
     }
 
-  glActiveTexture (GL_TEXTURE1);
-  glBindTexture (GL_TEXTURE_2D, self->glyph_tex);
+  glActiveTexture (GL_TEXTURE0 + column->tex_index);
+  glBindTexture (GL_TEXTURE_2D, column->tex_id);
   glTexSubImage2D (GL_TEXTURE_2D,
                    0,
                    column->x + 1, column->first_y + 1,
@@ -352,19 +395,13 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
                    bmp.buffer);
 
   surface = g_slice_new (GlrTexSurface);
-  surface->tex_id = self->glyph_tex;
+  surface->tex_id = column->tex_index;
   surface->left = column->x + 1;
   surface->top =  column->first_y + 1;
   surface->width = bmp.width;
   surface->height = bmp.rows;
 
   column->first_y += bmp.rows + 1;
-
-  if (self->right_most_column == NULL ||
-      column->x + column->width + 1 > self->right_most_column->x + self->right_most_column->width)
-    {
-      self->right_most_column = column;
-    }
 
   g_hash_table_insert (self->font_entries,
                        g_strdup (surface_id),
