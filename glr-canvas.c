@@ -8,8 +8,6 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/syscall.h>
-#include <unistd.h>
 
 #define TRANSFORM_TEX_WIDTH  1024
 #define TRANSFORM_TEX_HEIGHT  512
@@ -25,8 +23,6 @@ struct _GlrCanvas
   gint ref_count;
 
   GlrContext *context;
-
-  pid_t canvas_tid;
 
   GlrTarget *target;
 
@@ -54,12 +50,6 @@ typedef struct
   guint index;
   GlrLayer *layer;
 } LayerAttachment;
-
-static pid_t
-gettid (void)
-{
-  return (pid_t) syscall (SYS_gettid);
-}
 
 static void
 glr_canvas_free (GlrCanvas *self)
@@ -183,7 +173,12 @@ initialize_frame_if_needed (GlrCanvas *self)
       st = g_strdup_printf ("glyph_cache[%d]", i);
       loc = glGetUniformLocation (self->shader_program, st);
       glUniform1i (loc, i);
+      g_free (st);
     }
+
+  /* bind the transform buffer texture */
+  glActiveTexture (GL_TEXTURE8);
+  glBindTexture (GL_TEXTURE_2D, self->transform_buffer_tex);
 }
 
 static void
@@ -200,10 +195,6 @@ flush (GlrCanvas *self)
   LayerAttachment *layer_attachment;
 
   initialize_frame_if_needed (self);
-
-  /* bind the transform buffer texture */
-  glActiveTexture (GL_TEXTURE8);
-  glBindTexture (GL_TEXTURE_2D, self->transform_buffer_tex);
 
   g_mutex_lock (&self->layers_mutex);
 
@@ -250,7 +241,6 @@ glr_canvas_new (GlrContext *context, GlrTarget *target)
   self = g_slice_new0 (GlrCanvas);
   self->ref_count = 1;
 
-  self->canvas_tid = gettid ();
   self->target = glr_target_ref (target);
   self->context = glr_context_ref (context);
 
