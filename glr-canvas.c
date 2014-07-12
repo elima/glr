@@ -1,7 +1,7 @@
 #include "glr-canvas.h"
 
 #include <glib.h>
-#include "glr-command.h"
+#include "glr-batch.h"
 #include "glr-layer.h"
 #include "glr-paint.h"
 #include "glr-symbols.h"
@@ -185,11 +185,11 @@ initialize_frame_if_needed (GlrCanvas *self)
 }
 
 static void
-draw_command (GlrCommand *command, gpointer user_data)
+draw_batch (GlrBatch *batch, gpointer user_data)
 {
   GlrCanvas *self = user_data;
 
-  glr_command_draw (command, self->shader_program);
+  glr_batch_draw (batch, self->shader_program);
 }
 
 static void
@@ -207,14 +207,14 @@ flush (GlrCanvas *self)
 
   while ((layer_attachment = g_queue_pop_head (self->attached_layers)) != NULL)
     {
-      GQueue *command_queue;
+      GQueue *batch_queue;
 
-      /* The call to glr_layer_get_commands() will block until finish()
+      /* The call to glr_layer_get_batches() will block until finish()
          is called on the layer, if it has not finished yet. */
-      command_queue = glr_layer_get_commands (layer_attachment->layer);
+      batch_queue = glr_layer_get_batches (layer_attachment->layer);
 
       /* execute each batched drawing in the layer, in order */
-      g_queue_foreach (command_queue, (GFunc) draw_command, self);
+      g_queue_foreach (batch_queue, (GFunc) draw_batch, self);
 
       free_layer_attachment (layer_attachment);
     }

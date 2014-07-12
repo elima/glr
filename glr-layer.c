@@ -1,6 +1,6 @@
 #include "glr-layer.h"
 
-#include "glr-target.h"
+#include "glr-batch.h"
 #include "glr-tex-cache.h"
 #include <math.h>
 #include <sys/syscall.h>
@@ -19,8 +19,8 @@ struct _GlrLayer
 
   GlrContext *context;
 
-  GHashTable *commands;
-  GQueue *command_queue;
+  GHashTable *batches;
+  GQueue *batch_queue;
 
   GlrTransform transform;
   GlrPaint paint;
@@ -51,8 +51,8 @@ glr_layer_free (GlrLayer *self)
 {
   g_mutex_lock (&self->mutex);
 
-  g_queue_free (self->command_queue);
-  g_hash_table_unref (self->commands);
+  g_queue_free (self->batch_queue);
+  g_hash_table_unref (self->batches);
 
   if (self->thread != NULL)
     {
@@ -84,19 +84,19 @@ glr_layer_free (GlrLayer *self)
   g_debug ("GlrLayer freed\n");
 }
 
-static GlrCommand *
-get_draw_rect_command (GlrLayer *self, GlrPaintStyle style)
+static GlrBatch *
+get_draw_rect_batch (GlrLayer *self, GlrPaintStyle style)
 {
   gchar *cmd_id;
-  GlrCommand *command;
+  GlrBatch *batch;
 
   if (style == GLR_PAINT_STYLE_FILL)
     cmd_id = g_strdup_printf ("rect:fill");
   else
     cmd_id = g_strdup_printf ("rect:stroke");
 
-  command = g_hash_table_lookup (self->commands, cmd_id);
-  if (command == NULL)
+  batch = g_hash_table_lookup (self->batches, cmd_id);
+  if (batch == NULL)
     {
       const GlrPrimitive *primitive;
 
@@ -107,31 +107,31 @@ get_draw_rect_command (GlrLayer *self, GlrPaintStyle style)
         primitive = glr_context_get_primitive (self->context,
                                                GLR_PRIMITIVE_RECT_STROKE);
 
-      command = glr_command_new (primitive);
-      g_hash_table_insert (self->commands, g_strdup (cmd_id), command);
+      batch = glr_batch_new (primitive);
+      g_hash_table_insert (self->batches, g_strdup (cmd_id), batch);
     }
 
   g_free (cmd_id);
 
-  if (g_queue_find (self->command_queue, command) == NULL)
-    g_queue_push_tail (self->command_queue, command);
+  if (g_queue_find (self->batch_queue, batch) == NULL)
+    g_queue_push_tail (self->batch_queue, batch);
 
-  return command;
+  return batch;
 }
 
-static GlrCommand *
-get_draw_round_corner_command (GlrLayer *self, GlrPaintStyle style)
+static GlrBatch *
+get_draw_round_corner_batch (GlrLayer *self, GlrPaintStyle style)
 {
   gchar *cmd_id;
-  GlrCommand *command;
+  GlrBatch *batch;
 
   if (style == GLR_PAINT_STYLE_FILL)
     cmd_id = g_strdup_printf ("round-corner:fill");
   else
     cmd_id = g_strdup_printf ("round-corner:stroke");
 
-  command = g_hash_table_lookup (self->commands, cmd_id);
-  if (command == NULL)
+  batch = g_hash_table_lookup (self->batches, cmd_id);
+  if (batch == NULL)
     {
       const GlrPrimitive *primitive;
 
@@ -141,22 +141,22 @@ get_draw_round_corner_command (GlrLayer *self, GlrPaintStyle style)
       else
         g_assert_not_reached (); /* not implemeneted */
 
-      command = glr_command_new (primitive);
-      g_hash_table_insert (self->commands, g_strdup (cmd_id), command);
+      batch = glr_batch_new (primitive);
+      g_hash_table_insert (self->batches, g_strdup (cmd_id), batch);
     }
 
   g_free (cmd_id);
 
-  if (g_queue_find (self->command_queue, command) == NULL)
-    g_queue_push_tail (self->command_queue, command);
+  if (g_queue_find (self->batch_queue, batch) == NULL)
+    g_queue_push_tail (self->batch_queue, batch);
 
-  return command;
+  return batch;
 }
 
 static void
-reset_command (GlrCommand *command, gpointer user_data)
+reset_batch (GlrBatch *batch, gpointer user_data)
 {
-  glr_command_reset (command);
+  glr_batch_reset (batch);
 }
 
 static gpointer
@@ -182,7 +182,7 @@ draw_in_thread (gpointer user_data)
 /* internal API */
 
 GQueue *
-glr_layer_get_commands (GlrLayer *self)
+glr_layer_get_batches (GlrLayer *self)
 {
   g_return_val_if_fail (self != NULL, NULL);
 
@@ -199,7 +199,7 @@ glr_layer_get_commands (GlrLayer *self)
 
   g_mutex_unlock (&self->mutex);
 
-  return self->command_queue;
+  return self->batch_queue;
 }
 
 static void
@@ -209,7 +209,7 @@ copy_transform (GlrTransform *src, GlrTransform *dst)
 }
 
 static void
-add_round_corner_with_transform (GlrCommand   *round_corner_cmd,
+add_round_corner_with_transform (GlrBatch     *round_corner_batch,
                                  GlrLayout    *layout,
                                  guint32       color,
                                  GlrTransform *transform,
@@ -234,11 +234,11 @@ add_round_corner_with_transform (GlrCommand   *round_corner_cmd,
   final_transform.parent_origin_x = ox;
   final_transform.parent_origin_y = oy;
 
-  glr_command_add_instance (round_corner_cmd,
-                            layout,
-                            color,
-                            &final_transform,
-                            NULL);
+  glr_batch_add_instance (round_corner_batch,
+                          layout,
+                          color,
+                          &final_transform,
+                          NULL);
 }
 
 /* public API */
@@ -263,12 +263,12 @@ glr_layer_new (GlrContext *context)
   g_mutex_init (&self->thread_mutex);
   g_cond_init (&self->thread_cond);
 
-  /* commands table and queue */
-  self->commands = g_hash_table_new_full (g_str_hash,
+  /* batches table and queue */
+  self->batches = g_hash_table_new_full (g_str_hash,
                                           g_str_equal,
                                           g_free,
-                                          (GDestroyNotify) glr_command_free);
-  self->command_queue = g_queue_new ();
+                                          (GDestroyNotify) glr_batch_free);
+  self->batch_queue = g_queue_new ();
 
   /* texture cache */
   self->tex_cache = glr_context_get_texture_cache (self->context);
@@ -308,7 +308,7 @@ glr_layer_redraw (GlrLayer *self)
   g_mutex_lock (&self->mutex);
   self->finished = FALSE;
 
-  /* reset all commands */
+  /* reset all batches */
   glr_layer_clear (self);
 
   g_mutex_unlock (&self->mutex);
@@ -373,8 +373,8 @@ glr_layer_finish (GlrLayer *self)
 void
 glr_layer_clear (GlrLayer *self)
 {
-  /* reset all commands */
-  g_queue_foreach (self->command_queue, (GFunc) reset_command, NULL);
+  /* reset all batches */
+  g_queue_foreach (self->batch_queue, (GFunc) reset_batch, NULL);
 }
 
 void
@@ -385,13 +385,13 @@ glr_layer_draw_rect (GlrLayer *self,
                      gfloat    height,
                      GlrPaint *paint)
 {
-  GlrCommand *command;
+  GlrBatch *batch;
   GlrLayout layout;
 
   CHECK_LAYER_NOT_FINSHED (self);
 
-  command = get_draw_rect_command (self, paint->style);
-  if (glr_command_is_full (command))
+  batch = get_draw_rect_batch (self, paint->style);
+  if (glr_batch_is_full (batch))
     {
       /* Fail! */
       return;
@@ -402,11 +402,11 @@ glr_layer_draw_rect (GlrLayer *self,
   layout.width = width;
   layout.height = height;
 
-  glr_command_add_instance (command,
-                            &layout,
-                            paint->color,
-                            &self->transform,
-                            NULL);
+  glr_batch_add_instance (batch,
+                          &layout,
+                          paint->color,
+                          &self->transform,
+                          NULL);
 }
 
 void
@@ -460,14 +460,15 @@ glr_layer_draw_char (GlrLayer *self,
                      GlrFont  *font,
                      GlrPaint *paint)
 {
-  GlrCommand *command;
+  GlrBatch *batch;
   GlrLayout layout;
   const GlrTexSurface *surface;
 
   CHECK_LAYER_NOT_FINSHED (self);
 
-  command = get_draw_rect_command (self, GLR_PAINT_STYLE_FILL);
-  if (glr_command_is_full (command))
+
+  batch = get_draw_rect_batch (self, GLR_PAINT_STYLE_FILL);
+  if (glr_batch_is_full (batch))
     return;
 
   /* @FIXME: provide a default font in case none is specified */
@@ -478,7 +479,7 @@ glr_layer_draw_char (GlrLayer *self,
                                              unicode_char);
   if (surface == NULL)
     {
-      /* @FIXME: implement command breaking */
+      /* @FIXME: implement batch breaking */
       return;
     }
 
@@ -487,11 +488,11 @@ glr_layer_draw_char (GlrLayer *self,
   layout.width = surface->width / 3;
   layout.height = surface->height;
 
-  glr_command_add_instance (command,
-                            &layout,
-                            paint->color,
-                            &self->transform,
-                            surface);
+  glr_batch_add_instance (batch,
+                          &layout,
+                          paint->color,
+                          &self->transform,
+                          surface);
 }
 
 void
@@ -503,8 +504,8 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
                              gfloat    border_radius,
                              GlrPaint *paint)
 {
-  GlrCommand *round_corner_cmd;
-  GlrCommand *rect_cmd;
+  GlrBatch *round_corner_batch;
+  GlrBatch *rect_batch;
   GlrLayout layout;
   GlrTransform transform;
 
@@ -517,10 +518,10 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
       return;
     }
 
-  round_corner_cmd = get_draw_round_corner_command (self, paint->style);
-  rect_cmd = get_draw_rect_command (self, paint->style);
-  if (glr_command_is_full (round_corner_cmd) ||
-      glr_command_is_full (rect_cmd))
+  round_corner_batch = get_draw_round_corner_batch (self, paint->style);
+  rect_batch = get_draw_rect_batch (self, paint->style);
+  if (glr_batch_is_full (round_corner_batch) ||
+      glr_batch_is_full (rect_batch))
     {
       /* @TODO: implement flushing */
       return;
@@ -538,7 +539,7 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
   layout.width = border_radius;
   layout.height = border_radius;
 
-  add_round_corner_with_transform (round_corner_cmd,
+  add_round_corner_with_transform (round_corner_batch,
                                    &layout,
                                    paint->color,
                                    &self->transform,
@@ -549,7 +550,7 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
   layout.left = left + self->translate_x + width - border_radius;
   layout.top = top + self->translate_y + border_radius;
 
-  add_round_corner_with_transform (round_corner_cmd,
+  add_round_corner_with_transform (round_corner_batch,
                                    &layout,
                                    paint->color,
                                    &self->transform,
@@ -560,7 +561,7 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
   layout.left = left + self->translate_x + border_radius;
   layout.top = top + self->translate_y + height - border_radius;
 
-  add_round_corner_with_transform (round_corner_cmd,
+  add_round_corner_with_transform (round_corner_batch,
                                    &layout,
                                    paint->color,
                                    &self->transform,
@@ -571,7 +572,7 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
   layout.left = left + self->translate_x + width - border_radius;
   layout.top = top + self->translate_y + height - border_radius;
 
-  add_round_corner_with_transform (round_corner_cmd,
+  add_round_corner_with_transform (round_corner_batch,
                                    &layout,
                                    paint->color,
                                    &self->transform,
@@ -590,11 +591,11 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
   transform.origin_x = ox;
   transform.origin_y = oy;
 
-  glr_command_add_instance (rect_cmd,
-                            &layout,
-                            paint->color,
-                            &transform,
-                            NULL);
+  glr_batch_add_instance (rect_batch,
+                          &layout,
+                          paint->color,
+                          &transform,
+                          NULL);
 
   /* top rect */
   layout.left = left + self->translate_x + border_radius;
@@ -608,11 +609,11 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
   transform.origin_x = ox;
   transform.origin_y = oy;
 
-  glr_command_add_instance (rect_cmd,
-                            &layout,
-                            paint->color,
-                            &transform,
-                            NULL);
+  glr_batch_add_instance (rect_batch,
+                          &layout,
+                          paint->color,
+                          &transform,
+                          NULL);
 
   /* top rect */
   layout.left = left + self->translate_x + border_radius;
@@ -626,9 +627,9 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
   transform.origin_x = ox;
   transform.origin_y = oy;
 
-  glr_command_add_instance (rect_cmd,
-                            &layout,
-                            paint->color,
-                            &transform,
-                            NULL);
+  glr_batch_add_instance (rect_batch,
+                          &layout,
+                          paint->color,
+                          &transform,
+                          NULL);
 }

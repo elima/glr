@@ -3,7 +3,6 @@
 
 #include <GL/gl.h>
 #include <glib.h>
-#include "glr-command.h"
 #include "glr-context.h"
 #include "glr-paint.h"
 
@@ -68,8 +67,5 @@ void           glr_layer_draw_rounded_rect           (GlrLayer *self,
                                                       gfloat    border_radius,
                                                       GlrPaint *paint);
 
-/* internal API */
-/* @TODO: move these to glr-layer-priv.h */
-GQueue *       glr_layer_get_commands                (GlrLayer *self);
 
 #endif /* _GLR_LAYER_H_ */

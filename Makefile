@@ -9,7 +9,7 @@ libglr.so: Makefile \
 	glr-context.c glr-context.h \
 	glr-target.c glr-target.h \
 	glr-canvas.c glr-canvas.h \
-	glr-command.c glr-command.h \
+	glr-batch.c glr-batch.h \
 	glr-symbols.c glr-symbols.h \
 	glr-paint.c glr-paint.h \
 	glr-layer.c glr-layer.h \
@@ -21,7 +21,7 @@ libglr.so: Makefile \
 		glr-context.c \
 		glr-target.c \
 		glr-canvas.c \
-		glr-command.c \
+		glr-batch.c \
 		glr-symbols.c \
 		glr-paint.c \
 		glr-layer.c \

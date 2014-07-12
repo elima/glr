@@ -1,4 +1,4 @@
-#include "glr-command.h"
+#include "glr-batch.h"
 
 #include <float.h>
 #include <GL/gl.h>
@@ -23,7 +23,6 @@
 #define MAX_TEX_AREA_BUFFER_SIZE  (MAX_LAYOUT_BUFFER_SIZE / 4)
 
 #define EQUALS(x, y) (fabs (x - y) < DBL_EPSILON * fabs (x + y))
-// #define EQUALS(x, y) (fabs (x) - fabs(y) < DBL_EPSILON)
 
 #define PRIMITIVE_ATTR 0
 #define LAYOUT_ATTR    1
@@ -31,7 +30,7 @@
 #define CONFIG_ATTR    3
 #define TEX_AREA_ATTR  4
 
-struct _GlrCommand
+struct _GlrBatch
 {
   const GlrPrimitive *primitive;
 
@@ -76,7 +75,7 @@ grow_buffer (gpointer buffer, gsize size, gsize new_size)
 }
 
 static gboolean
-check_buffers_maybe_grow (GlrCommand *self)
+check_buffers_maybe_grow (GlrBatch *self)
 {
   gsize new_size;
 
@@ -130,12 +129,12 @@ has_transform (const GlrTransform *transform)
 
 /* public */
 
-GlrCommand *
-glr_command_new (const GlrPrimitive *primitive)
+GlrBatch *
+glr_batch_new (const GlrPrimitive *primitive)
 {
-  GlrCommand *self;
+  GlrBatch *self;
 
-  self = g_slice_new0 (GlrCommand);
+  self = g_slice_new0 (GlrBatch);
   self->primitive = primitive;
 
   // layout buffer
@@ -164,7 +163,7 @@ glr_command_new (const GlrPrimitive *primitive)
 }
 
 void
-glr_command_free (GlrCommand *self)
+glr_batch_free (GlrBatch *self)
 {
   g_slice_free1 (self->layout_buffer_size, self->layout_buffer);
   g_slice_free1 (self->color_buffer_size, self->color_buffer);
@@ -172,23 +171,23 @@ glr_command_free (GlrCommand *self)
   g_slice_free1 (self->transform_buffer_size, self->transform_buffer);
   g_slice_free1 (self->tex_area_buffer_size, self->tex_area_buffer);
 
-  g_slice_free (GlrCommand, self);
+  g_slice_free (GlrBatch, self);
   self = NULL;
 }
 
 gboolean
-glr_command_is_full (GlrCommand *self)
+glr_batch_is_full (GlrBatch *self)
 {
   return
     (self->num_instances + 1) * sizeof (GlrLayout) > MAX_LAYOUT_BUFFER_SIZE;
 }
 
 gboolean
-glr_command_add_instance (GlrCommand          *self,
-                          const GlrLayout     *layout,
-                          guint32              color,
-                          const GlrTransform  *transform,
-                          const GlrTexSurface *tex_surface)
+glr_batch_add_instance (GlrBatch            *self,
+                        const GlrLayout     *layout,
+                        guint32              color,
+                        const GlrTransform  *transform,
+                        const GlrTexSurface *tex_surface)
 {
   guint32 layout_offset;
   guint32 color_offset;
@@ -256,7 +255,7 @@ glr_command_add_instance (GlrCommand          *self,
 }
 
 gboolean
-glr_command_draw (GlrCommand *self, GLuint shader_program)
+glr_batch_draw (GlrBatch *self, GLuint shader_program)
 {
   GLsizei tex_height;
 
@@ -333,7 +332,7 @@ glr_command_draw (GlrCommand *self, GLuint shader_program)
 }
 
 void
-glr_command_reset (GlrCommand *self)
+glr_batch_reset (GlrBatch *self)
 {
   self->num_instances = 0;
   self->transform_buffer_count = 0;
