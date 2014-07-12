@@ -24,6 +24,8 @@ struct _GlrCanvas
 {
   gint ref_count;
 
+  GlrContext *context;
+
   pid_t canvas_tid;
 
   GlrTarget *target;
@@ -229,10 +231,10 @@ flush (GlrCanvas *self)
   glBindTexture (GL_TEXTURE_2D, 0);
 }
 
-/* public */
+/* public API */
 
 GlrCanvas *
-glr_canvas_new (GlrTarget *target)
+glr_canvas_new (GlrContext *context, GlrTarget *target)
 {
   GlrCanvas *self;
   GError *error = NULL;
@@ -249,7 +251,8 @@ glr_canvas_new (GlrTarget *target)
   self->ref_count = 1;
 
   self->canvas_tid = gettid ();
-  self->target = target;
+  self->target = glr_target_ref (target);
+  self->context = glr_context_ref (context);
 
   /* @FIXME: load the shader sources at compile time */
   if (! g_file_get_contents (CURRENT_DIR "/vertex.glsl",

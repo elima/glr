@@ -107,7 +107,7 @@ main (int argc, char* argv[])
   /* init glr */
   context = glr_context_new ();
   target = glr_target_new (WIDTH, HEIGHT, MSAA_SAMPLES);
-  canvas = glr_canvas_new (target);
+  canvas = glr_canvas_new (context, target);
 
   /* start the show */
   utils_main_loop (draw_func, resize_func, NULL);

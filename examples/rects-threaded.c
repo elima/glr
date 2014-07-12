@@ -110,7 +110,7 @@ main (int argc, char *argv[])
   /* init glr */
   context = glr_context_new ();
   target = glr_target_new (WIDTH, HEIGHT, MSAA_SAMPLES);
-  canvas = glr_canvas_new (target);
+  canvas = glr_canvas_new (context, target);
   layer1 = glr_layer_new (context);
   layer2 = glr_layer_new (context);
 

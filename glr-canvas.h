@@ -3,6 +3,7 @@
 
 #include <GL/gl.h>
 #include <glib.h>
+#include "glr-context.h"
 #include "glr-layer.h"
 #include "glr-paint.h"
 #include "glr-target.h"
@@ -16,7 +17,8 @@ typedef void (* GlrCanvasLayerDrawFunc) (GlrCanvas *self,
                                          guint64    frame_count,
                                          gpointer   user_data);
 
-GlrCanvas *         glr_canvas_new                  (GlrTarget *target);
+GlrCanvas *         glr_canvas_new                  (GlrContext *context,
+                                                     GlrTarget  *target);
 GlrCanvas *         glr_canvas_ref                  (GlrCanvas *self);
 void                glr_canvas_unref                (GlrCanvas *self);
 
