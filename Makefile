@@ -14,7 +14,7 @@ libglr.so: Makefile \
 	glr-paint.c glr-paint.h \
 	glr-layer.c glr-layer.h \
 	glr-tex-cache.c glr-tex-cache.h \
-	glr.h
+	glr.h glr-priv.h
 	gcc ${CFLAGS} \
 		`pkg-config --libs --cflags ${PKG_CONFIG_LIBS}` \
 		${LIBS} \

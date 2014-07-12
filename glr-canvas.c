@@ -4,6 +4,7 @@
 #include "glr-batch.h"
 #include "glr-layer.h"
 #include "glr-paint.h"
+#include "glr-priv.h"
 #include "glr-symbols.h"
 #include <math.h>
 #include <stdlib.h>
@@ -43,6 +44,9 @@ struct _GlrCanvas
 
   GMutex layers_mutex;
   GQueue *attached_layers;
+
+  GMutex commit_frame_mutex;
+  GCond commit_frame_cond;
 };
 
 typedef struct
@@ -61,6 +65,12 @@ glr_canvas_free (GlrCanvas *self)
 
   glDeleteTextures (1, &self->transform_buffer_tex);
   glDeleteTextures (1, &self->tex_area_buffer_tex);
+
+  glr_target_unref (self->target);
+  glr_context_unref (self->context);
+
+  g_mutex_clear (&self->commit_frame_mutex);
+  g_cond_clear (&self->commit_frame_cond);
 
   g_slice_free (GlrCanvas, self);
   self = NULL;
@@ -153,6 +163,7 @@ initialize_frame_if_needed (GlrCanvas *self)
       self->pending_clear = FALSE;
     }
 
+  glEnable (GL_BLEND);
   glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   glr_target_get_size (self->target, &width, &height);
@@ -163,7 +174,8 @@ initialize_frame_if_needed (GlrCanvas *self)
   glUniform1ui (self->width_loc, width);
   glUniform1ui (self->height_loc, height);
 
-  /* @FIXME: get the glyph texture id from texture cache, instead of hardcoding it here */
+  /* @FIXME: get the glyph texture ids from texture cache,
+     instead of hardcoding it here */
   gint i;
   for (i = 0; i < 8; i++)
     {
@@ -217,9 +229,21 @@ flush (GlrCanvas *self)
   self->attached_layers = g_queue_new ();
 
   g_mutex_unlock (&self->layers_mutex);
+}
 
-  /* unbind the transform buffer texture */
-  glBindTexture (GL_TEXTURE_2D, 0);
+/* internal API */
+void
+glr_canvas_commit_frame (GlrCanvas *self)
+{
+  /* attention! this runs in GlrContext's GL thread! */
+
+  flush (self);
+  glPopAttrib ();
+  glFlush ();
+
+  g_mutex_lock (&self->commit_frame_mutex);
+  self->frame_started = FALSE;
+  g_mutex_unlock (&self->commit_frame_mutex);
 }
 
 /* public API */
@@ -316,6 +340,9 @@ glr_canvas_new (GlrContext *context, GlrTarget *target)
   g_mutex_init (&self->layers_mutex);
   self->attached_layers = g_queue_new ();
 
+  g_mutex_init (&self->commit_frame_mutex);
+  g_cond_init (&self->commit_frame_cond);
+
   return self;
 }
 
@@ -356,21 +383,32 @@ glr_canvas_start_frame (GlrCanvas *self)
 void
 glr_canvas_finish_frame (GlrCanvas *self)
 {
+  GlrCmdCommitCanvasFrame *cmd;
+
   if (! self->frame_started)
     {
       g_warning ("No frame started. Ignoring.");
       return;
     }
 
-  flush (self);
+  cmd = g_new (GlrCmdCommitCanvasFrame, 1);
+  cmd->canvas = glr_canvas_ref (self);
 
-  glPopAttrib ();
-  glActiveTexture (GL_TEXTURE0);
+  g_mutex_lock (&self->commit_frame_mutex);
 
-  self->frame_started = FALSE;
+  glr_context_queue_command (self->context,
+                             GLR_CMD_COMMIT_CANVAS_FRAME,
+                             cmd,
+                             &self->commit_frame_cond);
+
+  /* we need to block until context is done committing our frame */
+  while (self->frame_started)
+    g_cond_wait (&self->commit_frame_cond, &self->commit_frame_mutex);
 
   self->frame_initialized = FALSE;
   self->frame_count++;
+
+  g_mutex_unlock (&self->commit_frame_mutex);
 }
 
 void

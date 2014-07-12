@@ -1,5 +1,7 @@
 #include "glr-tex-cache.h"
 
+#include "glr-context.h"
+#include "glr-priv.h"
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_GLYPH_H
@@ -18,7 +20,6 @@ typedef struct
   guint width;
   guint first_y;
   GLuint tex_id;
-  guint tex_index;
 } TexColumn;
 
 typedef struct
@@ -31,6 +32,8 @@ typedef struct
 struct _GlrTexCache
 {
   gint ref_count;
+
+  GlrContext *context;
 
   FT_Library ft_lib;
   GHashTable *font_entries;
@@ -139,21 +142,20 @@ allocate_new_glyph_texture (GlrTexCache *self)
   tex->columns = NULL;
   tex->right_most_column = NULL;
 
-  glActiveTexture (GL_TEXTURE0 + self->num_glyph_texs - 1);
-  glGenTextures (1, &tex->id);
-  glBindTexture (GL_TEXTURE_2D, tex->id);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexImage2D (GL_TEXTURE_2D,
-                0,
-                GL_R8,
-                GLYPH_TEX_WIDTH, GLYPH_TEX_HEIGHT,
-                0,
-                GL_RED,
-                GL_UNSIGNED_BYTE,
-                NULL);
+  GlrCmdCreateTex *data = g_new0 (GlrCmdCreateTex, 1);
+  data->texture_id = self->num_glyph_texs - 1;
+  data->internal_format = GL_R8;
+  data->width = GLYPH_TEX_WIDTH;
+  data->height = GLYPH_TEX_HEIGHT;
+  data->format = GL_RED;
+  data->type = GL_UNSIGNED_BYTE;
+
+  glr_context_queue_command (self->context,
+                             GLR_CMD_CREATE_TEX,
+                             data,
+                             NULL);
+
+  tex->id = self->num_glyph_texs - 1;
 
   return tex;
 }
@@ -166,7 +168,6 @@ find_surface_for_glyph (GlrTexCache *self,
   GList *node;
   TexColumn *column = NULL;
   gint i;
-  GlrTexSurface *surface = NULL;
   Texture *tex;
 
   if (width >= GLYPH_TEX_WIDTH || height >= GLYPH_TEX_HEIGHT)
@@ -206,7 +207,6 @@ find_surface_for_glyph (GlrTexCache *self,
               column->width = width;
               column->first_y = 0;
               column->tex_id = tex->id;
-              column->tex_index = i;
 
               tex->columns = g_list_insert_sorted (tex->columns,
                                                    column,
@@ -223,7 +223,6 @@ find_surface_for_glyph (GlrTexCache *self,
               column->width = width;
               column->first_y = 0;
               column->tex_id = tex->id;
-              column->tex_index = i;
 
               tex->columns = g_list_insert_sorted (tex->columns,
                                                    column,
@@ -246,15 +245,17 @@ find_surface_for_glyph (GlrTexCache *self,
   return column;
 }
 
-/* public API */
+/* internal API */
 
 GlrTexCache *
-glr_tex_cache_new (void)
+glr_tex_cache_new (GlrContext *context)
 {
   GlrTexCache *self;
 
   self = g_slice_new0 (GlrTexCache);
   self->ref_count = 1;
+
+  self->context = context;
 
   self->font_entries =
     g_hash_table_new_full (g_str_hash,
@@ -276,6 +277,8 @@ glr_tex_cache_new (void)
 
   return self;
 }
+
+/* public API */
 
 GlrTexCache *
 glr_tex_cache_ref (GlrTexCache *self)
@@ -383,19 +386,26 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
       goto out;
     }
 
-  glActiveTexture (GL_TEXTURE0 + column->tex_index);
-  glBindTexture (GL_TEXTURE_2D, column->tex_id);
-  glTexSubImage2D (GL_TEXTURE_2D,
-                   0,
-                   column->x + 1, column->first_y + 1,
-                   bmp.width,
-                   bmp.rows,
-                   GL_RED,
-                   GL_UNSIGNED_BYTE,
-                   bmp.buffer);
+  guint8 *buf = g_new (guint8, bmp.pitch * bmp.rows);
+  memcpy (buf, bmp.buffer, bmp.pitch * bmp.rows);
+
+  GlrCmdUploadToTex *data = g_new0 (GlrCmdUploadToTex, 1);
+  data->texture_id = column->tex_id;
+  data->x_offset = column->x + 1;
+  data->y_offset = column->first_y + 1;
+  data->width = bmp.width;
+  data->height = bmp.rows;
+  data->buffer = buf;
+  data->format = GL_RED;
+  data->type = GL_UNSIGNED_BYTE;
+
+  glr_context_queue_command (self->context,
+                             GLR_CMD_UPLOAD_TO_TEX,
+                             data,
+                             NULL);
 
   surface = g_slice_new (GlrTexSurface);
-  surface->tex_id = column->tex_index;
+  surface->tex_id = column->tex_id;
   surface->left = column->x + 1;
   surface->top =  column->first_y + 1;
   surface->width = bmp.width;

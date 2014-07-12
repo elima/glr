@@ -4,6 +4,8 @@
 #include <GL/gl.h>
 #include <glib.h>
 
+typedef struct _GlrTexCache GlrTexCache;
+
 typedef struct
 {
   GLuint tex_id;
@@ -12,10 +14,6 @@ typedef struct
   guint16 width;
   guint16 height;
 } GlrTexSurface;
-
-typedef struct _GlrTexCache GlrTexCache;
-
-GlrTexCache *         glr_tex_cache_new               (void);
 
 GlrTexCache *         glr_tex_cache_ref               (GlrTexCache *self);
 void                  glr_tex_cache_unref             (GlrTexCache *self);
