@@ -7,6 +7,5 @@
 #include "glr-canvas.h"
 #include "glr-paint.h"
 #include "glr-layer.h"
-#include "glr-tex-cache.h"
 
 #endif /* _GLR_H_ */
