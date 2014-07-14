@@ -10,13 +10,15 @@ typedef struct
   GLenum mode;
   gfloat *vertices;
   gsize num_vertices;
+  gsize vertex_count;
 } GlrPrimitive;
 
 enum
   {
     GLR_PRIMITIVE_RECT_FILL = 0,
     GLR_PRIMITIVE_RECT_STROKE,
-    GLR_PRIMITIVE_ROUND_CORNER_FILL
+    GLR_PRIMITIVE_ROUND_CORNER_FILL,
+    GLR_PRIMITIVE_ROUND_CORNER_STROKE
   };
 
 typedef enum
@@ -54,21 +56,24 @@ typedef struct
   GlrCanvas *canvas;
 } GlrCmdCommitCanvasFrame;
 
-const GlrPrimitive *   glr_context_get_primitive        (GlrContext *self,
+const GlrPrimitive *   glr_context_get_primitive         (GlrContext *self,
                                                          guint       primitive_id);
+const GlrPrimitive *   glr_context_get_dynamic_primitive (GlrContext *self,
+                                                          guint       primitive_id,
+                                                          gfloat      dyn_value);
 
-GlrTexCache *          glr_context_get_texture_cache    (GlrContext *self);
+GlrTexCache *          glr_context_get_texture_cache     (GlrContext *self);
 
-void                   glr_context_queue_command        (GlrContext *self,
-                                                         GlrCmdType  type,
-                                                         gpointer    data,
-                                                         GCond      *cond);
+void                   glr_context_queue_command         (GlrContext *self,
+                                                          GlrCmdType  type,
+                                                          gpointer    data,
+                                                          GCond      *cond);
 
 
-GlrTexCache *          glr_tex_cache_new                (GlrContext *context);
+GlrTexCache *          glr_tex_cache_new                 (GlrContext *context);
 
-GQueue *               glr_layer_get_batches            (GlrLayer *self);
+GQueue *               glr_layer_get_batches             (GlrLayer *self);
 
-void                   glr_canvas_commit_frame          (GlrCanvas *self);
+void                   glr_canvas_commit_frame           (GlrCanvas *self);
 
 #endif /* _GLR_PRIV_H_ */
