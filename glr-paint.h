@@ -22,6 +22,8 @@ struct _GlrPaint
   gfloat stroke_width;
   gfloat stroke_factor;
   gfloat stroke_pattern;
+
+  gfloat border_width;
 };
 
 typedef struct _GlrFont GlrFont;

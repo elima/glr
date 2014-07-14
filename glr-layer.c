@@ -2,6 +2,7 @@
 
 #include "glr-batch.h"
 #include "glr-tex-cache.h"
+#include "glr-priv.h"
 #include <math.h>
 #include <sys/syscall.h>
 #include <string.h>
@@ -120,12 +121,12 @@ get_draw_rect_batch (GlrLayer *self, GlrPaintStyle style)
 }
 
 static GlrBatch *
-get_draw_round_corner_batch (GlrLayer *self, GlrPaintStyle style)
+get_round_corner_batch (GlrLayer *self, GlrPaint *paint, gfloat radius)
 {
   gchar *cmd_id;
   GlrBatch *batch;
 
-  if (style == GLR_PAINT_STYLE_FILL)
+  if (paint->style == GLR_PAINT_STYLE_FILL)
     cmd_id = g_strdup_printf ("round-corner:fill");
   else
     cmd_id = g_strdup_printf ("round-corner:stroke");
@@ -135,11 +136,18 @@ get_draw_round_corner_batch (GlrLayer *self, GlrPaintStyle style)
     {
       const GlrPrimitive *primitive;
 
-      if (style == GLR_PAINT_STYLE_FILL)
+      if (paint->style == GLR_PAINT_STYLE_FILL)
         primitive = glr_context_get_primitive (self->context,
                                                GLR_PRIMITIVE_ROUND_CORNER_FILL);
       else
-        g_assert_not_reached (); /* not implemeneted */
+        {
+          gfloat border_width = paint->border_width / radius;
+
+          primitive =
+            glr_context_get_dynamic_primitive (self->context,
+                                               GLR_PRIMITIVE_ROUND_CORNER_STROKE,
+                                               border_width);
+        }
 
       batch = glr_batch_new (primitive);
       g_hash_table_insert (self->batches, g_strdup (cmd_id), batch);
@@ -206,39 +214,6 @@ static void
 copy_transform (GlrTransform *src, GlrTransform *dst)
 {
   memcpy (dst, src, sizeof (GlrTransform));
-}
-
-static void
-add_round_corner_with_transform (GlrBatch     *round_corner_batch,
-                                 GlrLayout    *layout,
-                                 guint32       color,
-                                 GlrTransform *transform,
-                                 gdouble       rx,
-                                 gdouble       ry,
-                                 gdouble       corner_rotation)
-{
-  GlrTransform final_transform;
-  gdouble sx, sy, ox, oy;
-
-  sx = transform->scale_x;
-  sy = transform->scale_y;
-
-  copy_transform (transform, &final_transform);
-  final_transform.rotation_z = corner_rotation;
-  final_transform.origin_x = 0.0;
-  final_transform.origin_y = 0.0;
-
-  ox = (rx - layout->left*sx) / (layout->width*sx);
-  oy = (ry - layout->top*sy) / (layout->height*sy);
-  final_transform.parent_rotation_z = transform->rotation_z;
-  final_transform.parent_origin_x = ox;
-  final_transform.parent_origin_y = oy;
-
-  glr_batch_add_instance (round_corner_batch,
-                          layout,
-                          color,
-                          &final_transform,
-                          NULL);
 }
 
 /* public API */
@@ -511,15 +486,8 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
 
   CHECK_LAYER_NOT_FINSHED (self);
 
-  /* @FIXME: only filled rrect current implemented */
-  if (paint->style == GLR_PAINT_STYLE_STROKE)
-    {
-      g_warning ("Storked rrect not implemented. Ignoring");
-      return;
-    }
-
-  round_corner_batch = get_draw_round_corner_batch (self, paint->style);
-  rect_batch = get_draw_rect_batch (self, paint->style);
+  round_corner_batch = get_round_corner_batch (self, paint, border_radius);
+  rect_batch = get_draw_rect_batch (self, GLR_PAINT_STYLE_FILL);
   if (glr_batch_is_full (round_corner_batch) ||
       glr_batch_is_full (rect_batch))
     {
@@ -539,97 +507,198 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
   layout.width = border_radius;
   layout.height = border_radius;
 
-  add_round_corner_with_transform (round_corner_batch,
-                                   &layout,
-                                   paint->color,
-                                   &self->transform,
-                                   rx, ry,
-                                   M_PI / 2.0 * 2.0);
+  ox = (rx - layout.left*sx) / (layout.width*sx);
+  oy = (ry - layout.top*sy) / (layout.height*sy);
+  copy_transform (&self->transform, &transform);
+  transform.origin_x = ox;
+  transform.origin_y = oy;
+  transform.pre_rotation_z = M_PI / 2.0 * 2.0;
+
+  glr_batch_add_instance (round_corner_batch,
+                          &layout,
+                          paint->color,
+                          &transform,
+                          NULL);
 
   /* top right corner */
   layout.left = left + self->translate_x + width - border_radius;
   layout.top = top + self->translate_y + border_radius;
 
-  add_round_corner_with_transform (round_corner_batch,
-                                   &layout,
-                                   paint->color,
-                                   &self->transform,
-                                   rx, ry,
-                                   M_PI / 2.0 * 3.0);
+  ox = (rx - layout.left*sx) / (layout.width*sx);
+  oy = (ry - layout.top*sy) / (layout.height*sy);
+  copy_transform (&self->transform, &transform);
+  transform.origin_x = ox;
+  transform.origin_y = oy;
+  transform.pre_rotation_z = M_PI / 2.0 * 1.0;
+
+  glr_batch_add_instance (round_corner_batch,
+                          &layout,
+                          paint->color,
+                          &transform,
+                          NULL);
 
   /* bottom left corner */
   layout.left = left + self->translate_x + border_radius;
   layout.top = top + self->translate_y + height - border_radius;
 
-  add_round_corner_with_transform (round_corner_batch,
-                                   &layout,
-                                   paint->color,
-                                   &self->transform,
-                                   rx, ry,
-                                   M_PI / 2.0 * 1.0);
+  ox = (rx - layout.left*sx) / (layout.width*sx);
+  oy = (ry - layout.top*sy) / (layout.height*sy);
+  copy_transform (&self->transform, &transform);
+  transform.origin_x = ox;
+  transform.origin_y = oy;
+  transform.pre_rotation_z = M_PI / 2.0 * 3.0;
+
+  glr_batch_add_instance (round_corner_batch,
+                          &layout,
+                          paint->color,
+                          &transform,
+                          NULL);
 
   /* bottom right corner */
   layout.left = left + self->translate_x + width - border_radius;
   layout.top = top + self->translate_y + height - border_radius;
 
-  add_round_corner_with_transform (round_corner_batch,
-                                   &layout,
-                                   paint->color,
-                                   &self->transform,
-                                   rx, ry,
-                                   M_PI / 2.0 * 4.0);
-
-  /* horiz rect */
-  layout.left = left + self->translate_x;
-  layout.top = top + self->translate_y + border_radius;
-  layout.width = width;
-  layout.height = height - border_radius * 2;
-
   ox = (rx - layout.left*sx) / (layout.width*sx);
   oy = (ry - layout.top*sy) / (layout.height*sy);
   copy_transform (&self->transform, &transform);
   transform.origin_x = ox;
   transform.origin_y = oy;
+  transform.pre_rotation_z = M_PI / 2.0 * 4.0;
 
-  glr_batch_add_instance (rect_batch,
+  glr_batch_add_instance (round_corner_batch,
                           &layout,
                           paint->color,
                           &transform,
                           NULL);
 
-  /* top rect */
-  layout.left = left + self->translate_x + border_radius;
-  layout.top = top + self->translate_y;
-  layout.width = width - border_radius * 2;
-  layout.height = border_radius;
+  if (paint->style == GLR_PAINT_STYLE_STROKE)
+    {
+      /* left border */
+      layout.left = left + self->translate_x;
+      layout.top = top + self->translate_y + border_radius;
+      layout.width = paint->border_width;
+      layout.height = height - border_radius * 2;
 
-  ox = (rx - layout.left*sx) / (layout.width*sx);
-  oy = (ry - layout.top*sy) / (layout.height*sy);
-  copy_transform (&self->transform, &transform);
-  transform.origin_x = ox;
-  transform.origin_y = oy;
+      ox = (rx - layout.left*sx) / (layout.width*sx);
+      oy = (ry - layout.top*sy) / (layout.height*sy);
+      copy_transform (&self->transform, &transform);
+      transform.origin_x = ox;
+      transform.origin_y = oy;
 
-  glr_batch_add_instance (rect_batch,
-                          &layout,
-                          paint->color,
-                          &transform,
-                          NULL);
+      glr_batch_add_instance (rect_batch,
+                              &layout,
+                              paint->color,
+                              &transform,
+                              NULL);
 
-  /* top rect */
-  layout.left = left + self->translate_x + border_radius;
-  layout.top = top + self->translate_y + height - border_radius;
-  layout.width = width - border_radius * 2;
-  layout.height = border_radius;
+      /* right border */
+      layout.left = left + self->translate_x + width - paint->border_width;
+      layout.top = top + self->translate_y + border_radius;
+      layout.width = paint->border_width;
+      layout.height = height - border_radius * 2;
 
-  ox = (rx - layout.left*sx) / (layout.width*sx);
-  oy = (ry - layout.top*sy) / (layout.height*sy);
-  copy_transform (&self->transform, &transform);
-  transform.origin_x = ox;
-  transform.origin_y = oy;
+      ox = (rx - layout.left*sx) / (layout.width*sx);
+      oy = (ry - layout.top*sy) / (layout.height*sy);
+      copy_transform (&self->transform, &transform);
+      transform.origin_x = ox;
+      transform.origin_y = oy;
 
-  glr_batch_add_instance (rect_batch,
-                          &layout,
-                          paint->color,
-                          &transform,
-                          NULL);
+      glr_batch_add_instance (rect_batch,
+                              &layout,
+                              paint->color,
+                              &transform,
+                              NULL);
+
+      /* top border */
+      layout.left = left + self->translate_x + border_radius;
+      layout.top = top + self->translate_y;
+      layout.width = width - border_radius * 2;
+      layout.height = paint->border_width;
+
+      ox = (rx - layout.left*sx) / (layout.width*sx);
+      oy = (ry - layout.top*sy) / (layout.height*sy);
+      copy_transform (&self->transform, &transform);
+      transform.origin_x = ox;
+      transform.origin_y = oy;
+
+      glr_batch_add_instance (rect_batch,
+                              &layout,
+                              paint->color,
+                              &transform,
+                              NULL);
+
+      /* bottom border */
+      layout.left = left + self->translate_x + border_radius;
+      layout.top = top + self->translate_y + height - paint->border_width;
+      layout.width = width - border_radius * 2;
+      layout.height = paint->border_width;
+
+      ox = (rx - layout.left*sx) / (layout.width*sx);
+      oy = (ry - layout.top*sy) / (layout.height*sy);
+      copy_transform (&self->transform, &transform);
+      transform.origin_x = ox;
+      transform.origin_y = oy;
+
+      glr_batch_add_instance (rect_batch,
+                              &layout,
+                              paint->color,
+                              &transform,
+                              NULL);
+    }
+  else
+    {
+      /* horiz rect */
+      layout.left = left + self->translate_x;
+      layout.top = top + self->translate_y + border_radius;
+      layout.width = width;
+      layout.height = height - border_radius * 2;
+
+      ox = (rx - layout.left*sx) / (layout.width*sx);
+      oy = (ry - layout.top*sy) / (layout.height*sy);
+      copy_transform (&self->transform, &transform);
+      transform.origin_x = ox;
+      transform.origin_y = oy;
+
+      glr_batch_add_instance (rect_batch,
+                              &layout,
+                              paint->color,
+                              &transform,
+                              NULL);
+
+      /* top rect */
+      layout.left = left + self->translate_x + border_radius;
+      layout.top = top + self->translate_y;
+      layout.width = width - border_radius * 2;
+      layout.height = border_radius;
+
+      ox = (rx - layout.left*sx) / (layout.width*sx);
+      oy = (ry - layout.top*sy) / (layout.height*sy);
+      copy_transform (&self->transform, &transform);
+      transform.origin_x = ox;
+      transform.origin_y = oy;
+
+      glr_batch_add_instance (rect_batch,
+                              &layout,
+                              paint->color,
+                              &transform,
+                              NULL);
+
+      /* bottom rect */
+      layout.left = left + self->translate_x + border_radius;
+      layout.top = top + self->translate_y + height - border_radius;
+      layout.width = width - border_radius * 2;
+      layout.height = border_radius;
+
+      ox = (rx - layout.left*sx) / (layout.width*sx);
+      oy = (ry - layout.top*sy) / (layout.height*sy);
+      copy_transform (&self->transform, &transform);
+      transform.origin_x = ox;
+      transform.origin_y = oy;
+
+      glr_batch_add_instance (rect_batch,
+                              &layout,
+                              paint->color,
+                              &transform,
+                              NULL);
+    }
 }

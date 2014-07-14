@@ -78,15 +78,11 @@ void main()
       float scale_x = transform1[2];
       float scale_y = transform1[3];
       float rotation_z = -transform2[0];
-      float parent_rotation_z = -transform2[1];
-      float parent_origin_x = transform2[2];
-      float parent_origin_y = transform2[3];
+      float pre_rotation_z = -transform2[1];
 
       mat4 translate, translate_inv;
-      mat4 parent_translate, parent_translate_inv;
       mat4 window_scale, window_scale_inv;
       mat4 object_scale, object_scale_inv;
-      mat4 rotation;
 
       window_scale = mat4 (
         aspect_ratio, 0.0, 0.0, 0.0,
@@ -112,47 +108,37 @@ void main()
       );
       translate_inv = inverse (translate);
 
+      // apply pre-rotation (round-corner primitives)
+      if (pre_rotation_z != 0.0)
+        {
+          mat4 pre_rotation = mat4 (
+            cos (pre_rotation_z), -sin (pre_rotation_z),  0.0, 0.0,
+            sin (pre_rotation_z),  cos (pre_rotation_z),  0.0, 0.0,
+            0.0,                      0.0,  1.0, 0.0,
+            0.0,                      0.0,  0.0, 1.0
+          );
+
+          pos = pos * pre_rotation;
+        }
+
+      // apply instance's transform
+      pos *= translate;
       if (rotation_z != 0.0)
         {
-          rotation = mat4 (
+          mat4 rotation = mat4 (
             cos (rotation_z), -sin (rotation_z),  0.0, 0.0,
             sin (rotation_z),  cos (rotation_z),  0.0, 0.0,
                          0.0,               0.0,  1.0, 0.0,
                          0.0,               0.0,  0.0, 1.0
           );
-        }
 
-      // apply instance's transform
-      pos = pos * translate;
-      if (rotation_z != 0.0)
-        pos = window_scale * rotation * object_scale * window_scale_inv * pos;
+          pos = window_scale * rotation * object_scale * window_scale_inv * pos;
+        }
       else
-        pos = window_scale * object_scale * window_scale_inv * pos;
-      pos = pos * translate_inv;
-
-
-      // apply parent's transform
-
-      parent_translate = mat4 (
-        1.0, 0.0, 0.0, -parent_origin_x,
-        0.0, 1.0, 0.0, -parent_origin_y,
-        0.0, 0.0, 1.0,              0.0,
-        0.0, 0.0, 0.0,              1.0
-      );
-      parent_translate_inv = inverse (parent_translate);
-
-      pos = pos * object_scale_inv * parent_translate;
-      if (parent_rotation_z != 0.0)
         {
-          rotation = mat4 (
-            cos (parent_rotation_z), -sin (parent_rotation_z),  0.0, 0.0,
-            sin (parent_rotation_z),  cos (parent_rotation_z),  0.0, 0.0,
-                                0.0,                      0.0,  1.0, 0.0,
-                                0.0,                      0.0,  0.0, 1.0
-          );
-          pos = rotation * pos;
+          pos = window_scale * object_scale * window_scale_inv * pos;
         }
-      pos = pos * object_scale * parent_translate_inv;
+      pos *= translate_inv;
     }
 
   // apply layout

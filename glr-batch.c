@@ -122,7 +122,7 @@ has_transform (const GlrTransform *transform)
 {
   return
     ! EQUALS (transform->rotation_z, 0.0)
-    || ! EQUALS (transform->parent_rotation_z, 0.0)
+    || ! EQUALS (transform->pre_rotation_z, 0.0)
     || ! EQUALS (transform->scale_x, 1.0)
     || ! EQUALS (transform->scale_y, 1.0);
 }
@@ -137,24 +137,24 @@ glr_batch_new (const GlrPrimitive *primitive)
   self = g_slice_new0 (GlrBatch);
   self->primitive = primitive;
 
-  // layout buffer
+  /* layout buffer */
   self->layout_buffer_size = INITIAL_LAYOUT_BUFFER_SIZE;
   self->layout_buffer = g_slice_alloc (self->layout_buffer_size);
 
-  // color buffer
+  /* color buffer */
   self->color_buffer_size = INITIAL_COLOR_BUFFER_SIZE;
   self->color_buffer = g_slice_alloc (self->color_buffer_size);
 
-  // config buffer
+  /* config buffer */
   self->config_buffer_size = INITIAL_CONFIG_BUFFER_SIZE;
   self->config_buffer = g_slice_alloc (self->config_buffer_size);
 
-  // transform buffer
+  /* transform buffer */
   self->transform_buffer_count = 0;
   self->transform_buffer_size = INITIAL_TRANSFORM_BUFFER_SIZE;
   self->transform_buffer = g_slice_alloc (self->transform_buffer_size);
 
-  // texture area buffer
+  /* texture area buffer */
   self->tex_area_buffer_count = 0;
   self->tex_area_buffer_size = INITIAL_TEX_AREA_BUFFER_SIZE;
   self->tex_area_buffer = g_slice_alloc (self->tex_area_buffer_size);

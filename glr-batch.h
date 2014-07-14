@@ -26,9 +26,9 @@ typedef struct __attribute__((__packed__))
   gfloat scale_x;
   gfloat scale_y;
   gfloat rotation_z;
-  gfloat parent_rotation_z;
-  gfloat parent_origin_x;
-  gfloat parent_origin_y;
+  gfloat pre_rotation_z;
+  gfloat _padding_0_;
+  gfloat _padding_1_;
 } GlrTransform;
 
 GlrBatch * glr_batch_new            (const GlrPrimitive *primitive);
