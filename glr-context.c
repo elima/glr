@@ -313,12 +313,16 @@ glr_context_get_primitive (GlrContext *self, guint primitive_id)
 const GlrPrimitive *
 glr_context_get_dynamic_primitive (GlrContext *self,
                                    guint       primitive_id,
-                                   gfloat      dyn_value)
+                                   gdouble     dyn_value1,
+                                   gdouble     dyn_value2)
 {
   gchar *dyn_id;
   GlrPrimitive *primitive;
 
-  dyn_id = g_strdup_printf ("%d:%08f", primitive_id, dyn_value);
+  dyn_id = g_strdup_printf ("%d:%08f:%08f",
+                            primitive_id,
+                            dyn_value1,
+                            dyn_value2);
 
   primitive = g_hash_table_lookup (self->dyn_primitives, dyn_id);
   if (primitive != NULL)
@@ -336,20 +340,22 @@ glr_context_get_dynamic_primitive (GlrContext *self,
         /* stroked round corner primitive */
         primitive = glr_primitive_new (GL_TRIANGLE_STRIP,
                                        DEFAULT_NUM_ROUND_CORNER_VERTICES * 2);
-        gfloat step = (M_PI/2.0) / (DEFAULT_NUM_ROUND_CORNER_VERTICES - 2);
-        gfloat border_width = dyn_value;
-        gfloat h1 = 1.0 - border_width;
+        gdouble step = (M_PI/2.0) / (DEFAULT_NUM_ROUND_CORNER_VERTICES - 2);
+        gdouble h1, h2;
+
+        h1 = 1.0 - dyn_value1;
+        h2 = 1.0 - dyn_value2;
 
         for (i = DEFAULT_NUM_ROUND_CORNER_VERTICES - 2; i >= 0; i--)
           {
-            gfloat a, x, y, x1, y1;
+            gdouble a, x, y, x1, y1;
 
             a = step * i;
             x = cos (a);
             y = sin (a);
 
             x1 = x * h1;
-            y1 = y * h1;
+            y1 = y * h2;
 
             glr_primitive_add_vertex (primitive, x, y);
             glr_primitive_add_vertex (primitive, x1, y1);

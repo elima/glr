@@ -60,7 +60,8 @@ const GlrPrimitive *   glr_context_get_primitive         (GlrContext *self,
                                                          guint       primitive_id);
 const GlrPrimitive *   glr_context_get_dynamic_primitive (GlrContext *self,
                                                           guint       primitive_id,
-                                                          gfloat      dyn_value);
+                                                          gdouble     dyn_value1,
+                                                          gdouble     dyn_value2);
 
 GlrTexCache *          glr_context_get_texture_cache     (GlrContext *self);
 
