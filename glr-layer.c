@@ -86,7 +86,7 @@ glr_layer_free (GlrLayer *self)
 }
 
 static GlrBatch *
-get_draw_rect_batch (GlrLayer *self, GlrPaintStyle style)
+get_rect_batch (GlrLayer *self, GlrPaintStyle style)
 {
   gchar *cmd_id;
   GlrBatch *batch;
@@ -115,38 +115,51 @@ get_draw_rect_batch (GlrLayer *self, GlrPaintStyle style)
   g_free (cmd_id);
 
   if (g_queue_find (self->batch_queue, batch) == NULL)
-    g_queue_push_tail (self->batch_queue, batch);
+    g_queue_push_tail (self->batch_queue, glr_batch_ref (batch));
 
   return batch;
 }
 
 static GlrBatch *
-get_round_corner_batch (GlrLayer *self, GlrPaint *paint, gfloat radius)
+get_round_corner_batch (GlrLayer      *self,
+                        GlrPaintStyle  style,
+                        gdouble        radius,
+                        gdouble        border_width1,
+                        gdouble        border_width2)
 {
   gchar *cmd_id;
-  GlrBatch *batch;
+  GlrBatch *batch = NULL;
+  gdouble dyn_value1, dyn_value2;
 
-  if (paint->style == GLR_PAINT_STYLE_FILL)
-    cmd_id = g_strdup_printf ("round-corner:fill");
+  if (style == GLR_PAINT_STYLE_FILL)
+    {
+      cmd_id = g_strdup_printf ("round-corner:fill");
+    }
   else
-    cmd_id = g_strdup_printf ("round-corner:stroke");
+    {
+      dyn_value1 = border_width1 / radius;
+      dyn_value2 = border_width2 / radius;
+
+      cmd_id = g_strdup_printf ("round-corner:stroke:%08f:%08f", dyn_value1, dyn_value2);
+    }
 
   batch = g_hash_table_lookup (self->batches, cmd_id);
   if (batch == NULL)
     {
       const GlrPrimitive *primitive;
 
-      if (paint->style == GLR_PAINT_STYLE_FILL)
-        primitive = glr_context_get_primitive (self->context,
-                                               GLR_PRIMITIVE_ROUND_CORNER_FILL);
+      if (style == GLR_PAINT_STYLE_FILL)
+        {
+          primitive = glr_context_get_primitive (self->context,
+                                                 GLR_PRIMITIVE_ROUND_CORNER_FILL);
+        }
       else
         {
-          gfloat border_width = paint->border_width / radius;
-
           primitive =
             glr_context_get_dynamic_primitive (self->context,
                                                GLR_PRIMITIVE_ROUND_CORNER_STROKE,
-                                               border_width);
+                                               dyn_value1,
+                                               dyn_value2);
         }
 
       batch = glr_batch_new (primitive);
@@ -156,7 +169,7 @@ get_round_corner_batch (GlrLayer *self, GlrPaint *paint, gfloat radius)
   g_free (cmd_id);
 
   if (g_queue_find (self->batch_queue, batch) == NULL)
-    g_queue_push_tail (self->batch_queue, batch);
+    g_queue_push_tail (self->batch_queue, glr_batch_ref (batch));
 
   return batch;
 }
@@ -381,6 +394,8 @@ glr_layer_clear (GlrLayer *self)
 {
   /* reset all batches */
   g_queue_foreach (self->batch_queue, (GFunc) reset_batch, NULL);
+  g_queue_free_full (self->batch_queue, (GDestroyNotify) glr_batch_unref);
+  self->batch_queue = g_queue_new ();
 }
 
 void
@@ -396,7 +411,7 @@ glr_layer_draw_rect (GlrLayer *self,
 
   CHECK_LAYER_NOT_FINSHED (self);
 
-  batch = get_draw_rect_batch (self, paint->style);
+  batch = get_rect_batch (self, paint->style);
   if (glr_batch_is_full (batch))
     {
       /* Fail! */
@@ -473,7 +488,7 @@ glr_layer_draw_char (GlrLayer *self,
   CHECK_LAYER_NOT_FINSHED (self);
 
 
-  batch = get_draw_rect_batch (self, GLR_PAINT_STYLE_FILL);
+  batch = get_rect_batch (self, GLR_PAINT_STYLE_FILL);
   if (glr_batch_is_full (batch))
     return;
 
@@ -516,8 +531,12 @@ glr_layer_draw_rounded_rect (GlrLayer *self,
 
   CHECK_LAYER_NOT_FINSHED (self);
 
-  round_corner_batch = get_round_corner_batch (self, paint, border_radius);
-  rect_batch = get_draw_rect_batch (self, GLR_PAINT_STYLE_FILL);
+  round_corner_batch = get_round_corner_batch (self,
+                                               paint->style,
+                                               border_radius,
+                                               paint->border_width,
+                                               paint->border_width);
+  rect_batch = get_rect_batch (self, GLR_PAINT_STYLE_FILL);
   if (glr_batch_is_full (round_corner_batch) ||
       glr_batch_is_full (rect_batch))
     {
