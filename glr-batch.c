@@ -30,6 +30,12 @@
 #define CONFIG_ATTR    3
 #define TEX_AREA_ATTR  4
 
+enum
+  {
+    BACKGROUND_COLOR,
+    BACKGROUND_TEXTURE
+  };
+
 struct _GlrBatch
 {
   gint ref_count;
@@ -57,11 +63,6 @@ struct _GlrBatch
   guint32 tex_area_buffer_count;
 };
 
-typedef enum
-  {
-    GLR_BACKGROUND_COLOR,
-    GLR_BACKGROUND_TEXTURE
-  } GlrBackgroundType;
 static void
 glr_batch_free (GlrBatch *self)
 {
@@ -246,14 +247,14 @@ glr_batch_add_instance (GlrBatch            *self,
       self->tex_area_buffer_count += 1;
 
       /* first config word (32bits) stores background type (3bits) */
-      config1 = (GLR_BACKGROUND_TEXTURE << 29);
+      config1 = (BACKGROUND_TEXTURE << 29);
 
       /* bits 25 to 28 encode texutre id */
       config1 |= (tex_surface->tex_id << 25);
     }
   else
     {
-      config1 = (GLR_BACKGROUND_COLOR << 29);
+      config1 = (BACKGROUND_COLOR << 29);
     }
 
   self->config_buffer[config_offset] = config1;
