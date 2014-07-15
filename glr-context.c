@@ -9,8 +9,6 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#define MAX_PRIMITIVES 8
-
 #define DEFAULT_NUM_ROUND_CORNER_VERTICES 32
 
 struct _GlrContext
@@ -22,10 +20,6 @@ struct _GlrContext
   EGLContext gl_context;
 
   GlrTexCache *tex_cache;
-
-  GHashTable *dyn_primitives;
-  GlrPrimitive *primitives[MAX_PRIMITIVES];
-  guint num_primitives;
 
   GQueue *cmd_queue;
   GMutex cmd_queue_mutex;
@@ -59,19 +53,8 @@ gettid (void)
 }
 
 static void
-free_primitive (GlrPrimitive *primitive)
-{
-  g_slice_free1 (primitive->num_vertices * sizeof (gfloat) * 2,
-                 primitive->vertices);
-
-  g_slice_free (GlrPrimitive, primitive);
-}
-
-static void
 glr_context_free (GlrContext *self)
 {
-  gint i;
-
   /* stop GL thread */
   g_mutex_lock (&self->gl_mutex);
   self->gl_thread_quit = TRUE;
@@ -79,14 +62,6 @@ glr_context_free (GlrContext *self)
 
   g_cond_signal (&self->cmd_queue_cond);
   g_thread_join (self->gl_thread);
-
-  /* free primitives */
-  for (i = 0; i < self->num_primitives; i++)
-    {
-      if (self->primitives[i] != NULL)
-        free_primitive (self->primitives[i]);
-    }
-  g_hash_table_unref (self->dyn_primitives);
 
   glr_tex_cache_unref (self->tex_cache);
 
@@ -221,158 +196,6 @@ gl_thread_func (gpointer user_data)
 
 /* internal API */
 
-static GlrPrimitive *
-glr_primitive_new (GLenum mode, gsize num_vertices)
-{
-  GlrPrimitive *self;
-
-  self = g_slice_new0 (GlrPrimitive);
-  self->mode = mode;
-  self->num_vertices = num_vertices;
-  self->vertices =
-    g_slice_alloc (self->num_vertices * sizeof (gfloat) * 2);
-
-  return self;
-}
-
-static void
-glr_primitive_add_vertex (GlrPrimitive *self, gfloat x, gfloat y)
-{
-  self->vertices[self->vertex_count * 2 + 0] = x;
-  self->vertices[self->vertex_count * 2 + 1] = y;
-  self->vertex_count++;
-}
-
-const GlrPrimitive *
-glr_context_get_primitive (GlrContext *self, guint primitive_id)
-{
-  GlrPrimitive *primitive;
-
-  /* @FIXME: this will eventually need to be thread-safe */
-
-  if (self->primitives[primitive_id] != NULL)
-    return self->primitives[primitive_id];
-
-  switch (primitive_id)
-    {
-    case GLR_PRIMITIVE_RECT_FILL:
-      {
-        primitive = glr_primitive_new (GL_TRIANGLE_FAN, 4);
-        memcpy (primitive->vertices,
-                rect_vertices,
-                primitive->num_vertices * sizeof (gfloat) * 2);
-        break;
-      }
-
-    case GLR_PRIMITIVE_ROUND_CORNER_FILL:
-      {
-        /* filled round corner primitive */
-        primitive = glr_primitive_new (GL_TRIANGLE_FAN,
-                                       DEFAULT_NUM_ROUND_CORNER_VERTICES);
-
-        gint i, c = 0;
-        gfloat step = (M_PI/2.0) / (primitive->num_vertices - 2);
-
-        /* first vertice is (0,0) */
-        c++;
-
-        for (i = primitive->num_vertices - 2; i >= 0; i--)
-          {
-            gfloat a, x, y;
-
-            a = step * i;
-            x = cos (a);
-            y = sin (a);
-
-            glr_primitive_add_vertex (primitive, x, y);
-          }
-
-        break;
-      }
-
-    case GLR_PRIMITIVE_RECT_STROKE:
-      {
-        /* stroked rectangle primitive */
-        primitive = glr_primitive_new (GL_LINE_LOOP, 4);
-        memcpy (primitive->vertices,
-                rect_vertices,
-                primitive->num_vertices * sizeof (gfloat) * 2);
-        break;
-      }
-
-    default:
-      g_assert_not_reached ();
-    }
-
-  self->primitives[primitive_id] = primitive;
-  self->num_primitives++;
-
-  return primitive;
-}
-
-const GlrPrimitive *
-glr_context_get_dynamic_primitive (GlrContext *self,
-                                   guint       primitive_id,
-                                   gdouble     dyn_value1,
-                                   gdouble     dyn_value2)
-{
-  gchar *dyn_id;
-  GlrPrimitive *primitive;
-
-  dyn_id = g_strdup_printf ("%d:%08f:%08f",
-                            primitive_id,
-                            dyn_value1,
-                            dyn_value2);
-
-  primitive = g_hash_table_lookup (self->dyn_primitives, dyn_id);
-  if (primitive != NULL)
-    {
-      g_free (dyn_id);
-      return (const GlrPrimitive *) primitive;
-    }
-
-  switch (primitive_id)
-    {
-    case GLR_PRIMITIVE_ROUND_CORNER_STROKE:
-      {
-        gint i;
-
-        /* stroked round corner primitive */
-        primitive = glr_primitive_new (GL_TRIANGLE_STRIP,
-                                       DEFAULT_NUM_ROUND_CORNER_VERTICES * 2);
-        gdouble step = (M_PI/2.0) / (DEFAULT_NUM_ROUND_CORNER_VERTICES - 2);
-        gdouble h1, h2;
-
-        h1 = 1.0 - dyn_value1;
-        h2 = 1.0 - dyn_value2;
-
-        for (i = DEFAULT_NUM_ROUND_CORNER_VERTICES - 2; i >= 0; i--)
-          {
-            gdouble a, x, y, x1, y1;
-
-            a = step * i;
-            x = cos (a);
-            y = sin (a);
-
-            x1 = x * h1;
-            y1 = y * h2;
-
-            glr_primitive_add_vertex (primitive, x, y);
-            glr_primitive_add_vertex (primitive, x1, y1);
-          }
-
-        break;
-      }
-
-    default:
-      g_assert_not_reached ();
-    }
-
-  g_hash_table_insert (self->dyn_primitives, dyn_id, primitive);
-
-  return primitive;
-}
-
 GlrTexCache *
 glr_context_get_texture_cache (GlrContext *self)
 {
@@ -398,6 +221,18 @@ glr_context_queue_command (GlrContext *self,
   g_cond_signal (&self->cmd_queue_cond);
 
   g_mutex_unlock (&self->cmd_queue_mutex);
+}
+
+void
+glr_context_lock_gl (GlrContext *self)
+{
+  g_mutex_lock (&self->gl_mutex);
+}
+
+void
+glr_context_unlock_gl (GlrContext *self)
+{
+  g_mutex_unlock (&self->gl_mutex);
 }
 
 /* public API */
@@ -447,12 +282,6 @@ glr_context_new (void)
   g_print ("%s\n", ver_st);
 
   self->tex_cache = glr_tex_cache_new (self);
-
-  /* dynamic primitives */
-  self->dyn_primitives = g_hash_table_new_full (g_str_hash,
-                                                g_str_equal,
-                                                g_free,
-                                                (GDestroyNotify) free_primitive);
 
   return self;
 }

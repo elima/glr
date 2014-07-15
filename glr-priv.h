@@ -5,21 +5,21 @@
 #include "glr-context.h"
 #include "glr-tex-cache.h"
 
-typedef struct
-{
-  GLenum mode;
-  gfloat *vertices;
-  gsize num_vertices;
-  gsize vertex_count;
-} GlrPrimitive;
-
-enum
+typedef enum
   {
-    GLR_PRIMITIVE_RECT_FILL = 0,
-    GLR_PRIMITIVE_RECT_STROKE,
-    GLR_PRIMITIVE_ROUND_CORNER_FILL,
-    GLR_PRIMITIVE_ROUND_CORNER_STROKE
-  };
+    GLR_INSTANCE_RECT_BG = 0,
+    GLR_INSTANCE_BORDER_TOP,
+    GLR_INSTANCE_BORDER_RIGHT,
+    GLR_INSTANCE_BORDER_BOTTOM,
+    GLR_INSTANCE_BORDER_LEFT,
+    GLR_INSTANCE_BORDER_TOP_LEFT,
+    GLR_INSTANCE_BORDER_TOP_RIGHT,
+    GLR_INSTANCE_BORDER_BOTTOM_LEFT,
+    GLR_INSTANCE_BORDER_BOTTOM_RIGHT,
+    GLR_INSTANCE_CHAR_GLYPH,
+  } GlrInstanceType;
+
+typedef guint32 GlrInstanceConfig[4];
 
 typedef enum
   {
@@ -28,6 +28,26 @@ typedef enum
     GLR_CMD_UPLOAD_TO_TEX,
     GLR_CMD_COMMIT_CANVAS_FRAME
   } GlrCmdType;
+
+typedef struct __attribute__((__packed__))
+{
+  gfloat left;
+  gfloat top;
+  gfloat width;
+  gfloat height;
+} GlrLayout;
+
+typedef struct __attribute__((__packed__))
+{
+  gfloat origin_x;
+  gfloat origin_y;
+  gfloat rotation_z;
+  gfloat pre_rotation_z;
+  gfloat scale_x;
+  gfloat scale_y;
+  gfloat _padding_0_;
+  gfloat _padding_1_;
+} GlrTransform;
 
 typedef struct
 {
@@ -56,20 +76,12 @@ typedef struct
   GlrCanvas *canvas;
 } GlrCmdCommitCanvasFrame;
 
-const GlrPrimitive *   glr_context_get_primitive         (GlrContext *self,
-                                                         guint       primitive_id);
-const GlrPrimitive *   glr_context_get_dynamic_primitive (GlrContext *self,
-                                                          guint       primitive_id,
-                                                          gdouble     dyn_value1,
-                                                          gdouble     dyn_value2);
-
 GlrTexCache *          glr_context_get_texture_cache     (GlrContext *self);
 
 void                   glr_context_queue_command         (GlrContext *self,
                                                           GlrCmdType  type,
                                                           gpointer    data,
                                                           GCond      *cond);
-
 
 GlrTexCache *          glr_tex_cache_new                 (GlrContext *context);
 

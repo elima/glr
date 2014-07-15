@@ -11,7 +11,6 @@ libglr.so: Makefile \
 	glr-canvas.c glr-canvas.h \
 	glr-batch.c glr-batch.h \
 	glr-symbols.c glr-symbols.h \
-	glr-paint.c glr-paint.h \
 	glr-layer.c glr-layer.h \
 	glr-tex-cache.c glr-tex-cache.h \
 	glr.h glr-priv.h \
@@ -24,7 +23,6 @@ libglr.so: Makefile \
 		glr-canvas.c \
 		glr-batch.c \
 		glr-symbols.c \
-		glr-paint.c \
 		glr-layer.c \
 		glr-tex-cache.c \
 		glr-style.c \

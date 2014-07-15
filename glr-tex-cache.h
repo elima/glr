@@ -9,10 +9,12 @@ typedef struct _GlrTexCache GlrTexCache;
 typedef struct
 {
   GLuint tex_id;
-  guint16 left;
-  guint16 top;
-  guint16 width;
-  guint16 height;
+  gfloat left;
+  gfloat top;
+  gfloat width;
+  gfloat height;
+  guint16 pixel_width;
+  guint16 pixel_height;
 } GlrTexSurface;
 
 GlrTexCache *         glr_tex_cache_ref               (GlrTexCache *self);

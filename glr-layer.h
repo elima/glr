@@ -3,18 +3,11 @@
 
 #include <GL/gl.h>
 #include <glib.h>
+#include "glr-style.h"
 #include "glr-context.h"
-#include "glr-paint.h"
 
 typedef struct _GlrCanvas GlrCanvas;
 typedef struct _GlrLayer GlrLayer;
-
-typedef enum
-  {
-    GLR_LAYER_STATUS_NONE,
-    GLR_LAYER_STATUS_DRAWING,
-    GLR_LAYER_STATUS_FINISHED
-  } GlrLayerStatus;
 
 typedef void (*GlrLayerDrawFunc) (GlrLayer *layer, gpointer user_data);
 
@@ -41,31 +34,26 @@ void           glr_layer_translate                   (GlrLayer *self,
                                                       gfloat    x,
                                                       gfloat    y);
 
-GlrPaint *     glr_layer_get_default_paint           (GlrLayer *self);
-
 void           glr_layer_clear                       (GlrLayer *self);
+
+void           glr_layer_clip                        (GlrLayer *self,
+                                                      gfloat    top,
+                                                      gfloat    left,
+                                                      gfloat    width,
+                                                      gfloat    height);
 
 void           glr_layer_draw_rect                   (GlrLayer *self,
                                                       gfloat    left,
                                                       gfloat    top,
                                                       gfloat    width,
                                                       gfloat    height,
-                                                      GlrPaint *paint);
+                                                      GlrStyle *style);
 
 void           glr_layer_draw_char                   (GlrLayer *self,
                                                       guint32   unicode_char,
                                                       gfloat    left,
                                                       gfloat    top,
                                                       GlrFont  *font,
-                                                      GlrPaint *paint);
-
-void           glr_layer_draw_rounded_rect           (GlrLayer *self,
-                                                      gfloat    left,
-                                                      gfloat    top,
-                                                      gfloat    width,
-                                                      gfloat    height,
-                                                      gfloat    border_radius,
-                                                      GlrPaint *paint);
-
+                                                      GlrColor  color);
 
 #endif /* _GLR_LAYER_H_ */

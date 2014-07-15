@@ -5,43 +5,26 @@
 #include <glib.h>
 #include "glr-context.h"
 #include "glr-priv.h"
+#include "glr-style.h"
 #include "glr-tex-cache.h"
 
 typedef struct _GlrBatch GlrBatch;
 
-typedef struct __attribute__((__packed__))
-{
-  gfloat left;
-  gfloat top;
-  gfloat width;
-  gfloat height;
-} GlrLayout;
-
-typedef struct __attribute__((__packed__))
-{
-  gfloat origin_x;
-  gfloat origin_y;
-  gfloat scale_x;
-  gfloat scale_y;
-  gfloat rotation_z;
-  gfloat pre_rotation_z;
-  gfloat _padding_0_;
-  gfloat _padding_1_;
-} GlrTransform;
-
-GlrBatch * glr_batch_new            (const GlrPrimitive *primitive);
+GlrBatch * glr_batch_new            (void);
 GlrBatch * glr_batch_ref            (GlrBatch *self);
 void       glr_batch_unref          (GlrBatch *self);
 
 gboolean   glr_batch_is_full        (GlrBatch *self);
-gboolean   glr_batch_add_instance   (GlrBatch          *self,
-                                     const GlrLayout     *layout,
-                                     guint32              color,
-                                     const GlrTransform  *transform,
-                                     const GlrTexSurface *tex_surface);
+gboolean   glr_batch_add_instance   (GlrBatch                *self,
+                                     const GlrInstanceConfig  config,
+                                     const GlrLayout         *layout);
 
 gboolean   glr_batch_draw           (GlrBatch *self,
-                                     GLuint      shader_program);
+                                     GLuint    shader_program);
 void       glr_batch_reset          (GlrBatch *self);
+
+goffset    glr_batch_add_dyn_attr   (GlrBatch   *self,
+                                     const void *attr_data,
+                                     gsize       size);
 
 #endif /* _GLR_BATCH_H_ */

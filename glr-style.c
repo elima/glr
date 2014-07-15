@@ -1,6 +1,6 @@
 #include "glr-style.h"
 
-#include <math.h>
+#include <stdlib.h>
 
 enum
   {

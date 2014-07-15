@@ -4,7 +4,6 @@
 #include <glib.h>
 #include "glr-context.h"
 #include "glr-layer.h"
-#include "glr-paint.h"
 #include "glr-target.h"
 
 typedef struct _GlrCanvas GlrCanvas;
@@ -23,6 +22,6 @@ void                glr_canvas_attach_layer         (GlrCanvas *self,
                                                      GlrLayer  *layer);
 
 void                glr_canvas_clear                (GlrCanvas *self,
-                                                     GlrPaint  *paint);
+                                                     GlrColor   color);
 
 #endif /* _GLR_CANVAS_H_ */

@@ -4,13 +4,16 @@
 #include <GL/gl.h>
 #include <glib.h>
 
+#include "glr-context.h"
+
 G_BEGIN_DECLS
 
 typedef struct _GlrTarget GlrTarget;
 
-GlrTarget *     glr_target_new             (guint32 width,
-                                            guint32 height,
-                                            guint8  msaa_samples);
+GlrTarget *     glr_target_new             (GlrContext *context,
+                                            guint32     width,
+                                            guint32     height,
+                                            guint8      msaa_samples);
 GlrTarget *     glr_target_ref             (GlrTarget *self);
 void            glr_target_unref           (GlrTarget *self);
 

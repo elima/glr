@@ -406,10 +406,12 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
 
   surface = g_slice_new (GlrTexSurface);
   surface->tex_id = column->tex_id;
-  surface->left = column->x + 1;
-  surface->top =  column->first_y + 1;
-  surface->width = bmp.width;
-  surface->height = bmp.rows;
+  surface->left = (column->x + 1) / ((gfloat) GLYPH_TEX_WIDTH);
+  surface->top =  (column->first_y + 1) / (gfloat) GLYPH_TEX_HEIGHT;
+  surface->width = bmp.width / ((gfloat) GLYPH_TEX_WIDTH);
+  surface->height = bmp.rows / ((gfloat) GLYPH_TEX_HEIGHT);
+  surface->pixel_width = bmp.width / 3;
+  surface->pixel_height = bmp.rows;
 
   column->first_y += bmp.rows + 1;
 

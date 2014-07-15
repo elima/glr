@@ -8,7 +8,8 @@ all: Makefile examples
 examples: \
 	rects-threaded \
 	rects-and-text \
-	layers
+	layers \
+	borders
 
 rects-and-text: rects-and-text.c ${SOURCES}
 	gcc ${CFLAGS} \
@@ -33,3 +34,11 @@ layers: layers.c ${SOURCES}
 		${SOURCES} \
 		layers.c \
 		-o layers
+
+borders: borders.c ${SOURCES}
+	gcc ${CFLAGS} \
+		`pkg-config --libs --cflags ${PKG_CONFIG_LIBS}` \
+		${LIBS} \
+		${SOURCES} \
+		borders.c \
+		-o borders

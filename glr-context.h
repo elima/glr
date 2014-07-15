@@ -10,4 +10,7 @@ GlrContext *        glr_context_new                  (void);
 GlrContext *        glr_context_ref                  (GlrContext *self);
 void                glr_context_unref                (GlrContext *self);
 
+void                glr_context_lock_gl              (GlrContext *self);
+void                glr_context_unlock_gl            (GlrContext *self);
+
 #endif /* _GLR_CONTEXT_H_ */

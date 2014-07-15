@@ -6,11 +6,15 @@ struct _GlrTarget
 {
   gint ref_count;
 
+  GlrContext *context;
+
   GLuint fbo;
   GLuint fbo_render_buf;
   guint8 msaa_samples;
+
   guint32 width;
   guint32 height;
+  GMutex mutex;
 };
 
 static void
@@ -19,6 +23,10 @@ glr_target_free (GlrTarget *self)
   glDeleteRenderbuffers (1, &self->fbo_render_buf);
   glDeleteFramebuffers (1, &self->fbo);
 
+  g_mutex_clear (&self->mutex);
+
+  glr_context_unref (self->context);
+
   g_slice_free (GlrTarget, self);
   self = NULL;
 }
@@ -26,16 +34,22 @@ glr_target_free (GlrTarget *self)
 /* public API */
 
 GlrTarget *
-glr_target_new (guint32 width, guint32 height, guint8 msaa_samples)
+glr_target_new (GlrContext *context,
+                guint32     width,
+                guint32     height,
+                guint8      msaa_samples)
 {
   GlrTarget *self;
 
   self = g_slice_new0 (GlrTarget);
   self->ref_count = 1;
 
+  self->context = glr_context_ref (context);
   self->msaa_samples = msaa_samples;
+
   self->width = width;
   self->height = height;
+  g_mutex_init (&self->mutex);
 
   glEnable (GL_MULTISAMPLE);
 
@@ -90,11 +104,15 @@ glr_target_unref (GlrTarget *self)
 void
 glr_target_get_size (GlrTarget *self, guint32 *width, guint32 *height)
 {
+  g_mutex_lock (&self->mutex);
+
   if (width != NULL)
     *width = self->width;
 
   if (height != NULL)
     *height = self->height;
+
+  g_mutex_unlock (&self->mutex);
 }
 
 GLuint
@@ -106,8 +124,12 @@ glr_target_get_framebuffer (GlrTarget *self)
 void
 glr_target_resize (GlrTarget *self, guint width, guint height)
 {
+  g_mutex_lock (&self->mutex);
+
   self->width = width;
   self->height = height;
+
+  glr_context_lock_gl (self->context);
 
   glBindRenderbuffer (GL_RENDERBUFFER, self->fbo_render_buf);
   glRenderbufferStorageMultisample (GL_RENDERBUFFER,
@@ -115,4 +137,7 @@ glr_target_resize (GlrTarget *self, guint width, guint height)
                                     GL_RGBA8,
                                     self->width,
                                     self->height);
+
+  glr_context_unlock_gl (self->context);
+  g_mutex_unlock (&self->mutex);
 }

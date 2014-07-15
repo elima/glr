@@ -8,23 +8,35 @@
 #include <string.h>
 #include <unistd.h>
 
+#define EQUALS(x, y)   (fabs (x - y) <= DBL_EPSILON * fabs (x + y))
+#define UNEQUALS(x, y) (fabs (x - y)  > DBL_EPSILON * fabs (x + y))
+
 #define CHECK_LAYER_NOT_FINSHED(self) \
   if (self->finished) return g_warning ("Layer has been finished. Need to call redraw")
+
+#define INSTANCE_TYPE_MASK      0xC3FFFFFF
+#define BORDER_NUM_SAMPLES_MASK 0xFF0FFFFF
+
+typedef struct
+{
+  gfloat left;
+  gfloat top;
+  gfloat width;
+  gfloat height;
+} GlrRect;
 
 struct _GlrLayer
 {
   gint ref_count;
 
   pid_t tid;
-  GlrLayerStatus status;
 
   GlrContext *context;
 
-  GHashTable *batches;
+  GlrBatch *current_batch;
   GQueue *batch_queue;
 
   GlrTransform transform;
-  GlrPaint paint;
   gfloat translate_x;
   gfloat translate_y;
 
@@ -39,6 +51,8 @@ struct _GlrLayer
   gpointer draw_func_user_data;
 
   GlrTexCache *tex_cache;
+
+  GlrRect clip_area;
 };
 
 static pid_t
@@ -52,8 +66,7 @@ glr_layer_free (GlrLayer *self)
 {
   g_mutex_lock (&self->mutex);
 
-  g_queue_free (self->batch_queue);
-  g_hash_table_unref (self->batches);
+  g_queue_free_full (self->batch_queue, (GDestroyNotify) glr_batch_unref);
 
   if (self->thread != NULL)
     {
@@ -85,100 +98,13 @@ glr_layer_free (GlrLayer *self)
   g_debug ("GlrLayer freed\n");
 }
 
-static GlrBatch *
-get_rect_batch (GlrLayer *self, GlrPaintStyle style)
-{
-  gchar *cmd_id;
-  GlrBatch *batch;
-
-  if (style == GLR_PAINT_STYLE_FILL)
-    cmd_id = g_strdup_printf ("rect:fill");
-  else
-    cmd_id = g_strdup_printf ("rect:stroke");
-
-  batch = g_hash_table_lookup (self->batches, cmd_id);
-  if (batch == NULL)
-    {
-      const GlrPrimitive *primitive;
-
-      if (style == GLR_PAINT_STYLE_FILL)
-        primitive = glr_context_get_primitive (self->context,
-                                               GLR_PRIMITIVE_RECT_FILL);
-      else
-        primitive = glr_context_get_primitive (self->context,
-                                               GLR_PRIMITIVE_RECT_STROKE);
-
-      batch = glr_batch_new (primitive);
-      g_hash_table_insert (self->batches, g_strdup (cmd_id), batch);
-    }
-
-  g_free (cmd_id);
-
-  if (g_queue_find (self->batch_queue, batch) == NULL)
-    g_queue_push_tail (self->batch_queue, glr_batch_ref (batch));
-
-  return batch;
-}
-
-static GlrBatch *
-get_round_corner_batch (GlrLayer      *self,
-                        GlrPaintStyle  style,
-                        gdouble        radius,
-                        gdouble        border_width1,
-                        gdouble        border_width2)
-{
-  gchar *cmd_id;
-  GlrBatch *batch = NULL;
-  gdouble dyn_value1, dyn_value2;
-
-  if (style == GLR_PAINT_STYLE_FILL)
-    {
-      cmd_id = g_strdup_printf ("round-corner:fill");
-    }
-  else
-    {
-      dyn_value1 = border_width1 / radius;
-      dyn_value2 = border_width2 / radius;
-
-      cmd_id = g_strdup_printf ("round-corner:stroke:%08f:%08f", dyn_value1, dyn_value2);
-    }
-
-  batch = g_hash_table_lookup (self->batches, cmd_id);
-  if (batch == NULL)
-    {
-      const GlrPrimitive *primitive;
-
-      if (style == GLR_PAINT_STYLE_FILL)
-        {
-          primitive = glr_context_get_primitive (self->context,
-                                                 GLR_PRIMITIVE_ROUND_CORNER_FILL);
-        }
-      else
-        {
-          primitive =
-            glr_context_get_dynamic_primitive (self->context,
-                                               GLR_PRIMITIVE_ROUND_CORNER_STROKE,
-                                               dyn_value1,
-                                               dyn_value2);
-        }
-
-      batch = glr_batch_new (primitive);
-      g_hash_table_insert (self->batches, g_strdup (cmd_id), batch);
-    }
-
-  g_free (cmd_id);
-
-  if (g_queue_find (self->batch_queue, batch) == NULL)
-    g_queue_push_tail (self->batch_queue, glr_batch_ref (batch));
-
-  return batch;
-}
-
+/*
 static void
 reset_batch (GlrBatch *batch, gpointer user_data)
 {
   glr_batch_reset (batch);
 }
+*/
 
 static gpointer
 draw_in_thread (gpointer user_data)
@@ -207,18 +133,42 @@ copy_transform (GlrTransform *src, GlrTransform *dst)
 }
 
 static void
-add_instance_with_relative_transform (GlrLayer  *self,
-                                      GlrBatch  *batch,
-                                      GlrLayout *layout,
-                                      gfloat     sx,
-                                      gfloat     sy,
-                                      gfloat     rx,
-                                      gfloat     ry,
-                                      gfloat     pre_rotation_z,
-                                      GlrPaint  *paint)
+encode_and_store_transform (GlrBatch          *batch,
+                            GlrTransform      *transform,
+                            GlrInstanceConfig  config)
+{
+  goffset offset;
+
+  /* bits 24 to 25 (2 bits) of config0 encode the number of samples
+     that describe the transformation, always 2 for now */
+  config[0] |= 2 << 24;
+
+  offset = glr_batch_add_dyn_attr (batch, transform, sizeof (GlrTransform));
+  config[1] = offset;
+}
+
+static void
+instance_config_set_type (GlrInstanceConfig config, GlrInstanceType type)
+{
+  /* bits 26 to 29 (4 bits) of config0 encode the instance type */
+  config[0] = (config[0] & INSTANCE_TYPE_MASK) | (type << 26);
+}
+
+static void
+add_instance_with_relative_transform1 (GlrLayer          *self,
+                                       GlrBatch          *batch,
+                                       GlrInstanceConfig  config,
+                                       GlrLayout         *layout,
+                                       gfloat             sx,
+                                       gfloat             sy,
+                                       gfloat             rx,
+                                       gfloat             ry,
+                                       gfloat             pre_rotation_z,
+                                       GlrInstanceType    instance_type)
 {
   GlrTransform transform;
   gdouble ox, oy;
+  GlrLayout lyt;
 
   ox = (rx - layout->left*sx) / (layout->width*sx);
   oy = (ry - layout->top*sy) / (layout->height*sy);
@@ -227,15 +177,107 @@ add_instance_with_relative_transform (GlrLayer  *self,
   transform.origin_y = oy;
   transform.pre_rotation_z = pre_rotation_z;
 
-  layout->left += self->translate_x;
-  layout->top += self->translate_y;
+  memcpy (&lyt, layout, sizeof (GlrLayout));
+  lyt.left += self->translate_x;
+  lyt.top += self->translate_y;
 
-  glr_batch_add_instance (batch,
-                          layout,
-                          paint->color,
-                          &transform,
-                          NULL);
+  instance_config_set_type (config, instance_type);
+  encode_and_store_transform (batch, &transform, config);
+
+  glr_batch_add_instance (batch, config, &lyt);
 }
+
+static gboolean
+has_any_transform (const GlrTransform *transform)
+{
+  return UNEQUALS (transform->rotation_z, 0.0)
+    || UNEQUALS (transform->pre_rotation_z, 0.0)
+    || UNEQUALS (transform->scale_x, 1.0)
+    || UNEQUALS (transform->scale_y, 1.0);
+}
+
+static gboolean
+has_any_border (const GlrBorder *border)
+{
+  return UNEQUALS (border->width[0], 0.0)
+    || UNEQUALS (border->width[1], 0.0)
+    || UNEQUALS (border->width[2], 0.0)
+    || UNEQUALS (border->width[3], 0.0)
+
+    || UNEQUALS (border->radius[0], 0.0)
+    || UNEQUALS (border->radius[1], 0.0)
+    || UNEQUALS (border->radius[2], 0.0)
+    || UNEQUALS (border->radius[3], 0.0);
+}
+
+static void
+encode_and_store_border (GlrBatch          *batch,
+                         GlrBorder         *border,
+                         GlrInstanceConfig  config)
+{
+  goffset offset;
+  gfloat buf[16] = {0};
+  guint8 num_samples = 0;
+
+  gboolean all_style_equal;
+  gboolean all_width_equal;
+  gboolean all_radius_equal;
+  gboolean all_color_equal;
+
+  all_style_equal = border->style[0] == border->style[1]
+    && border->style[0] == border->style[2]
+    && border->style[0] == border->style[3];
+
+  all_width_equal = EQUALS (border->width[0], border->width[1])
+    && EQUALS (border->width[0], border->width[2])
+    && EQUALS (border->width[0], border->width[3]);
+
+  all_radius_equal = EQUALS (border->radius[0], border->radius[1])
+    && EQUALS (border->radius[0], border->radius[2])
+    && EQUALS (border->radius[0], border->radius[3]);
+
+  all_color_equal = border->color[0] == border->color[1]
+    && border->color[0] == border->color[2]
+    && border->color[0] == border->color[3];
+
+  /* the simplest case: style, width, radius and color of all borders are equal */
+  if (all_style_equal && all_width_equal && all_radius_equal && all_color_equal)
+    {
+      /* this case is encoded in 1 dyn attr sample */
+      buf[0] = border->style[0];
+      buf[1] = border->width[0];
+      buf[2] = border->radius[0];
+      buf[3] = border->color[0];
+
+      num_samples = 1;
+    }
+
+  if (num_samples == 0)
+    return;
+
+  /* bits 20 to 23 (4 bits) of config0 encode the number of samples
+     that describe the border */
+  config[0] = (config[0] & BORDER_NUM_SAMPLES_MASK) | (num_samples << 20);
+
+  offset = glr_batch_add_dyn_attr (batch,
+                                   buf,
+                                   sizeof (gfloat) * 4 * num_samples);
+
+  /* config2 encodes the offset of the border description */
+  config[2] = offset;
+}
+
+/* @TODO
+static void
+encode_and_store_background (GlrBatch          *batch,
+                             GlrBackground     *bg,
+                             GlrInstanceConfig  config)
+{
+  goffset offset;
+  gfloat buf[16] = {0};
+  guint8 num_samples = 0;
+}
+*/
 
 /* internal API */
 
@@ -282,12 +324,10 @@ glr_layer_new (GlrContext *context)
   g_mutex_init (&self->thread_mutex);
   g_cond_init (&self->thread_cond);
 
-  /* batches table and queue */
-  self->batches = g_hash_table_new_full (g_str_hash,
-                                          g_str_equal,
-                                          g_free,
-                                          (GDestroyNotify) glr_batch_unref);
+  /* batches queue */
+  self->current_batch = glr_batch_new ();
   self->batch_queue = g_queue_new ();
+  g_queue_push_head (self->batch_queue, self->current_batch);
 
   /* texture cache */
   self->tex_cache = glr_context_get_texture_cache (self->context);
@@ -328,7 +368,11 @@ glr_layer_redraw (GlrLayer *self)
   self->finished = FALSE;
 
   /* reset all batches */
-  glr_layer_clear (self);
+  g_queue_free_full (self->batch_queue, (GDestroyNotify) glr_batch_unref);
+  self->batch_queue = g_queue_new ();
+
+  self->current_batch = glr_batch_new ();
+  g_queue_push_head (self->batch_queue, self->current_batch);
 
   g_mutex_unlock (&self->mutex);
 }
@@ -393,41 +437,15 @@ void
 glr_layer_clear (GlrLayer *self)
 {
   /* reset all batches */
-  g_queue_foreach (self->batch_queue, (GFunc) reset_batch, NULL);
+  g_mutex_lock (&self->mutex);
+
   g_queue_free_full (self->batch_queue, (GDestroyNotify) glr_batch_unref);
   self->batch_queue = g_queue_new ();
-}
 
-void
-glr_layer_draw_rect (GlrLayer *self,
-                     gfloat    left,
-                     gfloat    top,
-                     gfloat    width,
-                     gfloat    height,
-                     GlrPaint *paint)
-{
-  GlrBatch *batch;
-  GlrLayout layout;
+  self->current_batch = glr_batch_new ();
+  g_queue_push_head (self->batch_queue, self->current_batch);
 
-  CHECK_LAYER_NOT_FINSHED (self);
-
-  batch = get_rect_batch (self, paint->style);
-  if (glr_batch_is_full (batch))
-    {
-      /* Fail! */
-      return;
-    }
-
-  layout.left = left + self->translate_x;
-  layout.top = top + self->translate_y;
-  layout.width = width;
-  layout.height = height;
-
-  glr_batch_add_instance (batch,
-                          &layout,
-                          paint->color,
-                          &self->transform,
-                          NULL);
+  g_mutex_unlock (&self->mutex);
 }
 
 void
@@ -435,8 +453,6 @@ glr_layer_set_transform_origin (GlrLayer *self,
                                 gfloat    origin_x,
                                 gfloat    origin_y)
 {
-  CHECK_LAYER_NOT_FINSHED (self);
-
   self->transform.origin_x = origin_x;
   self->transform.origin_y = origin_y;
 }
@@ -444,8 +460,6 @@ glr_layer_set_transform_origin (GlrLayer *self,
 void
 glr_layer_scale (GlrLayer *self, gfloat scale_x, gfloat scale_y)
 {
-  CHECK_LAYER_NOT_FINSHED (self);
-
   self->transform.scale_x = scale_x;
   self->transform.scale_y = scale_y;
 }
@@ -453,24 +467,27 @@ glr_layer_scale (GlrLayer *self, gfloat scale_x, gfloat scale_y)
 void
 glr_layer_rotate (GlrLayer *self, gfloat angle)
 {
-  CHECK_LAYER_NOT_FINSHED (self);
-
   self->transform.rotation_z = angle * ((((gfloat) M_PI * 2.0) / 360.0));
 }
 
 void
 glr_layer_translate (GlrLayer *self, gfloat x, gfloat y)
 {
-  CHECK_LAYER_NOT_FINSHED (self);
-
   self->translate_x = x;
   self->translate_y = y;
 }
 
-GlrPaint *
-glr_layer_get_default_paint (GlrLayer *self)
+void
+glr_layer_clip (GlrLayer *self,
+                gfloat    top,
+                gfloat    left,
+                gfloat    width,
+                gfloat    height)
 {
-  return &self->paint;
+  self->clip_area.left = left;
+  self->clip_area.top = top;
+  self->clip_area.width = width;
+  self->clip_area.height = height;
 }
 
 void
@@ -479,18 +496,22 @@ glr_layer_draw_char (GlrLayer *self,
                      gfloat    left,
                      gfloat    top,
                      GlrFont  *font,
-                     GlrPaint *paint)
+                     GlrColor  color)
 {
   GlrBatch *batch;
   GlrLayout layout;
+  GlrInstanceConfig config = {0};
   const GlrTexSurface *surface;
+  gfloat tex_area[4] = {0};
 
   CHECK_LAYER_NOT_FINSHED (self);
 
-
-  batch = get_rect_batch (self, GLR_PAINT_STYLE_FILL);
+  batch = self->current_batch;
   if (glr_batch_is_full (batch))
-    return;
+    {
+      /* @TODO: need flusing */
+      return;
+    }
 
   /* @FIXME: provide a default font in case none is specified */
   surface = glr_tex_cache_lookup_font_glyph (self->tex_cache,
@@ -504,191 +525,294 @@ glr_layer_draw_char (GlrLayer *self,
       return;
     }
 
+  instance_config_set_type (config, GLR_INSTANCE_CHAR_GLYPH);
+
+  if (has_any_transform (&self->transform))
+    encode_and_store_transform (batch, &self->transform, config);
+
   layout.left = left + self->translate_x;
   layout.top = top + self->translate_y;
-  layout.width = surface->width / 3;
-  layout.height = surface->height;
+  layout.width = surface->pixel_width;
+  layout.height = surface->pixel_height;
 
-  glr_batch_add_instance (batch,
-                          &layout,
-                          paint->color,
-                          &self->transform,
-                          surface);
+  tex_area[0] = surface->left;
+  tex_area[1] = surface->top;
+  tex_area[2] = surface->width;
+  tex_area[3] = surface->height;
+
+  /* @FIXME: move this to a more general way of describing background */
+  goffset offset;
+  offset = glr_batch_add_dyn_attr (batch, tex_area, sizeof (gfloat) * 4);
+  config[2] = offset;
+  config[3] = color;
+
+  /* bits 12 to 15 (4 bits) of config0 encode the texture unit to use,
+     either for glyphs, background-image or border-image */
+  config[0] |= surface->tex_id << 12;
+
+  glr_batch_add_instance (batch, config, &layout);
 }
 
 void
-glr_layer_draw_rounded_rect (GlrLayer *self,
-                             gfloat    left,
-                             gfloat    top,
-                             gfloat    width,
-                             gfloat    height,
-                             gfloat    border_radius,
-                             GlrPaint *paint)
+glr_layer_draw_rect (GlrLayer *self,
+                     gfloat    left,
+                     gfloat    top,
+                     gfloat    width,
+                     gfloat    height,
+                     GlrStyle *style)
 {
-  GlrBatch *round_corner_batch;
-  GlrBatch *rect_batch;
+  GlrBatch *batch;
   GlrLayout layout;
+  GlrBorder *br = &(style->border);
+  GlrBackground *bg = &(style->background);
+  gdouble rx, ry, sx, sy;
+  GlrInstanceConfig config = {0};
+  gboolean has_transform = FALSE;
+  gboolean has_border = FALSE;
+
+  gfloat aa = 1.2;
 
   CHECK_LAYER_NOT_FINSHED (self);
 
-  round_corner_batch = get_round_corner_batch (self,
-                                               paint->style,
-                                               border_radius,
-                                               paint->border_width,
-                                               paint->border_width);
-  rect_batch = get_rect_batch (self, GLR_PAINT_STYLE_FILL);
-  if (glr_batch_is_full (round_corner_batch) ||
-      glr_batch_is_full (rect_batch))
+  batch = self->current_batch;
+  if (glr_batch_is_full (batch))
     {
       /* @TODO: implement flushing */
       return;
     }
 
-  gdouble rx, ry, sx, sy;
+  has_transform = has_any_transform (&self->transform);
+  has_border = has_any_border (br);
+
+  /* encode and submit border, which is common to all sub-instances */
+  if (has_border)
+    encode_and_store_border (batch, br, config);
+
+  /* background */
+  if (bg->type != GLR_BACKGROUND_NONE)
+    {
+      instance_config_set_type (config, GLR_INSTANCE_RECT_BG);
+
+      /* the simplest type of background is flat color. In that case
+         config3 is the background color */
+      config[3] = style->background.color;
+
+      if (has_transform)
+        encode_and_store_transform (batch, &self->transform, config);
+
+      layout.left = left + self->translate_x - aa/2.0;
+      layout.top = top  + self->translate_y - aa/2.0;
+      layout.width = width + aa;
+      layout.height = height + aa;
+
+      glr_batch_add_instance (batch, config, &layout);
+    }
+
+  /* pre-calculations for the relative transform origin */
   sx = self->transform.scale_x;
   sy = self->transform.scale_y;
   rx = left*sx + (width*sx) * self->transform.origin_x;
   ry = top*sy + (height*sy) * self->transform.origin_y;
 
-  /* top left corner */
-  layout.left = left + border_radius;
-  layout.top = top + border_radius;
-  layout.width = border_radius;
-  layout.height = border_radius;
-
-  add_instance_with_relative_transform (self,
-                                        round_corner_batch,
-                                        &layout,
-                                        sx, sy, rx, ry,
-                                        M_PI / 2.0 * 2.0,
-                                        paint);
-
-  /* top right corner */
-  layout.left = left + width - border_radius;
-  layout.top = top + border_radius;
-
-  add_instance_with_relative_transform (self,
-                                        round_corner_batch,
-                                        &layout,
-                                        sx, sy, rx, ry,
-                                        M_PI / 2.0 * 1.0,
-                                        paint);
-
-  /* bottom left corner */
-  layout.left = left + border_radius;
-  layout.top = top + height - border_radius;
-
-  add_instance_with_relative_transform (self,
-                                        round_corner_batch,
-                                        &layout,
-                                        sx, sy, rx, ry,
-                                        M_PI / 2.0 * 3.0,
-                                        paint);
-
-  /* bottom right corner */
-  layout.left = left + width - border_radius;
-  layout.top = top + height - border_radius;
-
-  add_instance_with_relative_transform (self,
-                                        round_corner_batch,
-                                        &layout,
-                                        sx, sy, rx, ry,
-                                        M_PI / 2.0 * 4.0,
-                                        paint);
-
-  if (paint->style == GLR_PAINT_STYLE_STROKE)
+  /* left border */
+  if (UNEQUALS (br->width[0], 0.0))
     {
-      /* left border */
-      layout.left = left;
-      layout.top = top + border_radius;
-      layout.width = paint->border_width;
-      layout.height = height - border_radius * 2;
+      // g_print ("left border\n");
+      config[3] = br->color[0];
 
-      add_instance_with_relative_transform (self,
-                                            rect_batch,
-                                            &layout,
-                                            sx, sy, rx, ry,
-                                            0.0,
-                                            paint);
+      layout.left = left - aa/2.0;
+      layout.width = br->width[0] + aa;
+      layout.top = top - aa/2.0 + br->radius[0];
 
-      /* right border */
-      layout.left = left + width - paint->border_width;
-      layout.top = top + border_radius;
-      layout.width = paint->border_width;
-      layout.height = height - border_radius * 2;
+      if (UNEQUALS (br->radius[0], 0.0))
+        {
+          layout.height = height + aa - br->radius[2]
+            - MAX (br->radius[0], br->width[0]);
+        }
+      else
+        {
+          layout.height = height - br->radius[2]
+            - MAX (br->radius[0], br->width[0]);
+        }
 
-      add_instance_with_relative_transform (self,
-                                            rect_batch,
-                                            &layout,
-                                            sx, sy, rx, ry,
-                                            0.0,
-                                            paint);
-
-      /* top border */
-      layout.left = left + border_radius;
-      layout.top = top;
-      layout.width = width - border_radius * 2;
-      layout.height = paint->border_width;
-
-      add_instance_with_relative_transform (self,
-                                            rect_batch,
-                                            &layout,
-                                            sx, sy, rx, ry,
-                                            0.0,
-                                            paint);
-
-      /* bottom border */
-      layout.left = left + border_radius;
-      layout.top = top + height - paint->border_width;
-      layout.width = width - border_radius * 2;
-      layout.height = paint->border_width;
-
-      add_instance_with_relative_transform (self,
-                                            rect_batch,
-                                            &layout,
-                                            sx, sy, rx, ry,
-                                            0.0,
-                                            paint);
+      add_instance_with_relative_transform1 (self,
+                                             batch,
+                                             config,
+                                             &layout,
+                                             sx, sy, rx, ry,
+                                             0.0,
+                                             GLR_INSTANCE_BORDER_LEFT);
     }
-  else
+
+  /* top border */
+  if (UNEQUALS (br->width[1], 0.0))
     {
-      /* horiz rect */
-      layout.left = left;
-      layout.top = top + border_radius;
-      layout.width = width;
-      layout.height = height - border_radius * 2;
+      // g_print ("top border\n");
+      config[3] = br->color[1];
 
-      add_instance_with_relative_transform (self,
-                                            rect_batch,
-                                            &layout,
-                                            sx, sy, rx, ry,
-                                            0.0,
-                                            paint);
+      if (UNEQUALS (br->radius[0], 0.0))
+        {
+          layout.left = left - aa/2.0 + MAX (br->radius[0], br->width[0]);
+          layout.width = width + aa
+            - MAX (br->radius[0], br->width[0])
+            - br->radius[1];
+        }
+      else
+        {
+          layout.left = left + aa/2.0 + MAX (br->radius[0], br->width[0]);
+          layout.width = width
+            - MAX (br->radius[0], br->width[0])
+            - br->radius[1];
+        }
 
-      /* top rect */
-      layout.left = left + border_radius;
-      layout.top = top;
-      layout.width = width - border_radius * 2;
-      layout.height = border_radius;
+      layout.top = top - aa/2.0;
+      layout.height = br->width[1] + aa;
 
-      add_instance_with_relative_transform (self,
-                                            rect_batch,
-                                            &layout,
-                                            sx, sy, rx, ry,
-                                            0.0,
-                                            paint);
+      add_instance_with_relative_transform1 (self,
+                                             batch,
+                                             config,
+                                             &layout,
+                                             sx, sy, rx, ry,
+                                             0.0,
+                                             GLR_INSTANCE_BORDER_TOP);
+    }
 
-      /* bottom rect */
-      layout.left = left + border_radius;
-      layout.top = top + height - border_radius;
-      layout.width = width - border_radius * 2;
-      layout.height = border_radius;
+  /* right border */
+  if (UNEQUALS (br->width[2], 0.0))
+    {
+      // g_print ("top border\n");
+      config[3] = br->color[2];
 
-      add_instance_with_relative_transform (self,
-                                            rect_batch,
-                                            &layout,
-                                            sx, sy, rx, ry,
-                                            0.0,
-                                            paint);
+      layout.left = left + width - br->width[2] - aa/2.0;
+      layout.width = br->width[2] + aa;
+
+      if (UNEQUALS (br->radius[1], 0.0))
+        {
+          layout.top = top - aa/2.0 + MAX (br->radius[1], br->width[1]);
+          layout.height = height + aa
+            - MAX (br->radius[1], br->width[1])
+            - br->radius[3];
+        }
+      else
+        {
+          layout.top = top + aa/2.0 + MAX (br->radius[1], br->width[1]);
+          layout.height = height
+            - MAX (br->radius[1], br->width[1])
+            - br->radius[3];
+        }
+
+      add_instance_with_relative_transform1 (self,
+                                             batch,
+                                             config,
+                                             &layout,
+                                             sx, sy, rx, ry,
+                                             0.0,
+                                             GLR_INSTANCE_BORDER_RIGHT);
+    }
+
+  /* bottom border */
+  if (UNEQUALS (br->width[2], 0.0))
+    {
+      // g_print ("top border\n");
+      config[3] = br->color[3];
+
+      if (UNEQUALS (br->radius[2], 0.0))
+        {
+          layout.width = width + aa
+            - MAX (br->radius[2], br->width[0])
+            - br->radius[3];
+        }
+      else
+        {
+          layout.width = width
+            - MAX (br->radius[2], br->width[0])
+            - br->radius[3];
+        }
+
+      layout.left = left - aa/2.0 + br->radius[2];
+      layout.top = top + height - br->width[3] - aa/2.0;
+      layout.height = br->width[3] + aa;
+
+      add_instance_with_relative_transform1 (self,
+                                             batch,
+                                             config,
+                                             &layout,
+                                             sx, sy, rx, ry,
+                                             0.0,
+                                             GLR_INSTANCE_BORDER_BOTTOM);
+    }
+
+  /* top left border */
+  if (UNEQUALS (br->radius[0], 0.0)
+      && (UNEQUALS (br->width[0], 0.0)
+          || UNEQUALS (br->width[1], 0.0)))
+    {
+      config[3] = br->color[0];
+      layout.left = left + br->radius[0] - aa/2.0;
+      layout.top = top + br->radius[0] - aa/2.0;
+      layout.width = br->radius[0];
+      layout.height = br->radius[0];
+      add_instance_with_relative_transform1 (self,
+                                             batch,
+                                             config,
+                                             &layout,
+                                             sx, sy, rx, ry,
+                                             M_PI / 2.0 * 2.0,
+                                             GLR_INSTANCE_BORDER_TOP_LEFT);
+    }
+
+  /* top right border */
+  if (UNEQUALS (br->radius[1], 0.0)
+      && (UNEQUALS (br->width[1], 0.0)
+          || UNEQUALS (br->width[2], 0.0)))
+    {
+      config[3] = br->color[0];
+      layout.left = left + width - br->radius[1] + aa/2.0;
+      layout.top = top + br->radius[1] - aa/2.0;
+      layout.width = br->radius[1];
+      layout.height = br->radius[1];
+      add_instance_with_relative_transform1 (self,
+                                             batch,
+                                             config,
+                                             &layout,
+                                             sx, sy, rx, ry,
+                                             M_PI / 2.0 * 1.0,
+                                             GLR_INSTANCE_BORDER_TOP_RIGHT);
+    }
+
+  /* bottom left border */
+  if (UNEQUALS (br->radius[2], 0.0)
+      && UNEQUALS (br->width[0], 0.0)
+      && UNEQUALS (br->width[3], 0.0))
+    {
+      layout.left = left + br->radius[2] - aa/2.0;
+      layout.top = top + height - br->radius[2] + aa/2.0;
+      layout.width = br->radius[2];
+      layout.height = br->radius[2];
+      add_instance_with_relative_transform1 (self,
+                                             batch,
+                                             config,
+                                             &layout,
+                                             sx, sy, rx, ry,
+                                             M_PI / 2.0 * 3.0,
+                                             GLR_INSTANCE_BORDER_BOTTOM_LEFT);
+    }
+
+  /* bottom right border */
+  if (UNEQUALS (br->radius[3], 0.0)
+      && UNEQUALS (br->width[2], 0.0)
+      && UNEQUALS (br->width[3], 0.0))
+    {
+      layout.left = left + width - br->radius[3] + aa/2.0;
+      layout.top = top + height - br->radius[3] + aa/2.0;
+      layout.width = br->radius[3];
+      layout.height = br->radius[3];
+      add_instance_with_relative_transform1 (self,
+                                             batch,
+                                             config,
+                                             &layout,
+                                             sx, sy, rx, ry,
+                                             M_PI / 2.0 * 4.0,
+                                             GLR_INSTANCE_BORDER_BOTTOM_LEFT);
     }
 }

@@ -3,21 +3,17 @@
 #include <glib.h>
 #include "glr-batch.h"
 #include "glr-layer.h"
-#include "glr-paint.h"
 #include "glr-priv.h"
 #include "glr-symbols.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define TRANSFORM_TEX_WIDTH  1024
-#define TRANSFORM_TEX_HEIGHT  512
+#define DYN_ATTRS_TEX_WIDTH  1024
+#define DYN_ATTRS_TEX_HEIGHT 1024
 
-#define PRIMITIVE_ATTR 0
-#define LAYOUT_ATTR    1
-#define COLOR_ATTR     2
-#define CONFIG_ATTR    3
-#define TEX_AREA_ATTR  4
+#define LAYOUT_ATTR    0
+#define CONFIG_ATTR    1
 
 struct _GlrCanvas
 {
@@ -36,8 +32,7 @@ struct _GlrCanvas
   gboolean frame_started;
   gboolean frame_initialized;
 
-  GLuint transform_buffer_tex;
-  GLuint tex_area_buffer_tex;
+  GLuint dyn_attrs_buffer_tex;
 
   guint32 clear_color;
   gboolean pending_clear;
@@ -63,8 +58,7 @@ glr_canvas_free (GlrCanvas *self)
 
   glDeleteProgram (self->shader_program);
 
-  glDeleteTextures (1, &self->transform_buffer_tex);
-  glDeleteTextures (1, &self->tex_area_buffer_tex);
+  glDeleteTextures (1, &self->dyn_attrs_buffer_tex);
 
   glr_target_unref (self->target);
   glr_context_unref (self->context);
@@ -188,9 +182,9 @@ initialize_frame_if_needed (GlrCanvas *self)
       g_free (st);
     }
 
-  /* bind the transform buffer texture */
-  glActiveTexture (GL_TEXTURE8);
-  glBindTexture (GL_TEXTURE_2D, self->transform_buffer_tex);
+  /* bind the dyn attrs buffer texture */
+  glActiveTexture (GL_TEXTURE9);
+  glBindTexture (GL_TEXTURE_2D, self->dyn_attrs_buffer_tex);
 }
 
 static void
@@ -260,7 +254,7 @@ glr_canvas_new (GlrContext *context, GlrTarget *target)
   GLuint vertex_shader;
   GLuint fragment_shader;
 
-  GLuint transform_buffer_loc;
+  GLuint uniform_loc;
 
   self = g_slice_new0 (GlrCanvas);
   self->ref_count = 1;
@@ -298,11 +292,8 @@ glr_canvas_new (GlrContext *context, GlrTarget *target)
   glAttachShader (self->shader_program, vertex_shader);
   glAttachShader (self->shader_program, fragment_shader);
 
-  glBindAttribLocation (self->shader_program, PRIMITIVE_ATTR, "vertex");
   glBindAttribLocation (self->shader_program, LAYOUT_ATTR, "lyt");
-  glBindAttribLocation (self->shader_program, COLOR_ATTR, "col");
   glBindAttribLocation (self->shader_program, CONFIG_ATTR, "config");
-  glBindAttribLocation (self->shader_program, TEX_AREA_ATTR, "tex_area");
 
   glLinkProgram (self->shader_program);
 
@@ -315,11 +306,11 @@ glr_canvas_new (GlrContext *context, GlrTarget *target)
   self->width_loc = glGetUniformLocation (self->shader_program, "canvas_width");
   self->height_loc = glGetUniformLocation (self->shader_program, "canvas_height");
 
-  // transform buffer
+  // dyn attrs buffer
   glEnable (GL_TEXTURE_2D);
-  glGenTextures (1, &self->transform_buffer_tex);
-  glActiveTexture (GL_TEXTURE8);
-  glBindTexture (GL_TEXTURE_2D, self->transform_buffer_tex);
+  glGenTextures (1, &self->dyn_attrs_buffer_tex);
+  glActiveTexture (GL_TEXTURE9);
+  glBindTexture (GL_TEXTURE_2D, self->dyn_attrs_buffer_tex);
   glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
@@ -327,14 +318,14 @@ glr_canvas_new (GlrContext *context, GlrTarget *target)
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexImage2D (GL_TEXTURE_2D,
                 0, GL_RGBA32F,
-                TRANSFORM_TEX_WIDTH,
-                TRANSFORM_TEX_HEIGHT,
+                DYN_ATTRS_TEX_WIDTH,
+                DYN_ATTRS_TEX_HEIGHT,
                 0,
                 GL_RGBA, GL_FLOAT,
                 NULL);
-  transform_buffer_loc = glGetUniformLocation (self->shader_program,
-                                               "transform_buffer");
-  glUniform1i (transform_buffer_loc, 8);
+  uniform_loc = glGetUniformLocation (self->shader_program,
+                                      "dyn_attrs_buffer");
+  glUniform1i (uniform_loc, 9);
 
   /* layers */
   g_mutex_init (&self->layers_mutex);
@@ -412,9 +403,9 @@ glr_canvas_finish_frame (GlrCanvas *self)
 }
 
 void
-glr_canvas_clear (GlrCanvas *self, GlrPaint *paint)
+glr_canvas_clear (GlrCanvas *self, GlrColor color)
 {
-  self->clear_color = paint->color;
+  self->clear_color = color;
 
   if (self->frame_initialized)
     {
