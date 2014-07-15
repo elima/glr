@@ -32,6 +32,8 @@
 
 struct _GlrBatch
 {
+  gint ref_count;
+
   const GlrPrimitive *primitive;
 
   GLuint num_instances_loc;
@@ -60,6 +62,20 @@ typedef enum
     GLR_BACKGROUND_COLOR,
     GLR_BACKGROUND_TEXTURE
   } GlrBackgroundType;
+static void
+glr_batch_free (GlrBatch *self)
+{
+  g_slice_free1 (self->layout_buffer_size, self->layout_buffer);
+  g_slice_free1 (self->color_buffer_size, self->color_buffer);
+  g_slice_free1 (self->config_buffer_size, self->config_buffer);
+  g_slice_free1 (self->transform_buffer_size, self->transform_buffer);
+  g_slice_free1 (self->tex_area_buffer_size, self->tex_area_buffer);
+
+  g_slice_free (GlrBatch, self);
+  self = NULL;
+
+  // g_print ("GlrBatch freed\n");
+}
 
 static gpointer
 grow_buffer (gpointer buffer, gsize size, gsize new_size)
@@ -135,6 +151,8 @@ glr_batch_new (const GlrPrimitive *primitive)
   GlrBatch *self;
 
   self = g_slice_new0 (GlrBatch);
+  self->ref_count = 1;
+
   self->primitive = primitive;
 
   /* layout buffer */
@@ -162,17 +180,25 @@ glr_batch_new (const GlrPrimitive *primitive)
   return self;
 }
 
-void
-glr_batch_free (GlrBatch *self)
+GlrBatch *
+glr_batch_ref (GlrBatch *self)
 {
-  g_slice_free1 (self->layout_buffer_size, self->layout_buffer);
-  g_slice_free1 (self->color_buffer_size, self->color_buffer);
-  g_slice_free1 (self->config_buffer_size, self->config_buffer);
-  g_slice_free1 (self->transform_buffer_size, self->transform_buffer);
-  g_slice_free1 (self->tex_area_buffer_size, self->tex_area_buffer);
+  g_assert (self != NULL);
+  g_assert (self->ref_count > 0);
 
-  g_slice_free (GlrBatch, self);
-  self = NULL;
+  g_atomic_int_inc (&self->ref_count);
+
+  return self;
+}
+
+void
+glr_batch_unref (GlrBatch *self)
+{
+  g_assert (self != NULL);
+  g_assert (self->ref_count > 0);
+
+  if (g_atomic_int_dec_and_test (&self->ref_count))
+    glr_batch_free (self);
 }
 
 gboolean

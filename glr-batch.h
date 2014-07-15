@@ -7,8 +7,6 @@
 #include "glr-priv.h"
 #include "glr-tex-cache.h"
 
-G_BEGIN_DECLS
-
 typedef struct _GlrBatch GlrBatch;
 
 typedef struct __attribute__((__packed__))
@@ -32,7 +30,8 @@ typedef struct __attribute__((__packed__))
 } GlrTransform;
 
 GlrBatch * glr_batch_new            (const GlrPrimitive *primitive);
-void       glr_batch_free           (GlrBatch *self);
+GlrBatch * glr_batch_ref            (GlrBatch *self);
+void       glr_batch_unref          (GlrBatch *self);
 
 gboolean   glr_batch_is_full        (GlrBatch *self);
 gboolean   glr_batch_add_instance   (GlrBatch          *self,
@@ -44,7 +43,5 @@ gboolean   glr_batch_add_instance   (GlrBatch          *self,
 gboolean   glr_batch_draw           (GlrBatch *self,
                                      GLuint      shader_program);
 void       glr_batch_reset          (GlrBatch *self);
-
-G_END_DECLS
 
 #endif /* _GLR_BATCH_H_ */

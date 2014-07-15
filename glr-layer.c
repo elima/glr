@@ -273,7 +273,7 @@ glr_layer_new (GlrContext *context)
   self->batches = g_hash_table_new_full (g_str_hash,
                                           g_str_equal,
                                           g_free,
-                                          (GDestroyNotify) glr_batch_free);
+                                          (GDestroyNotify) glr_batch_unref);
   self->batch_queue = g_queue_new ();
 
   /* texture cache */
