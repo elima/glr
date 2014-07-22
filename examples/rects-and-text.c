@@ -10,9 +10,9 @@
 #define WINDOW_WIDTH    1280
 #define WINDOW_HEIGHT    960
 
-#define FONT_FILE  (FONTS_DIR "Cantarell-Regular.otf")
+// #define FONT_FILE  (FONTS_DIR "Cantarell-Regular.otf")
 // #define FONT_FILE  (FONTS_DIR "DejaVuSansMono-Bold.ttf")
-// #define FONT_FILE  (FONTS_DIR "Ubuntu-Title.ttf")
+#define FONT_FILE  (FONTS_DIR "Ubuntu-Title.ttf")
 
 #define FONT_SIZE 6
 #define SCALE 51

@@ -6,8 +6,6 @@
 
 #include "glr-context.h"
 
-G_BEGIN_DECLS
-
 typedef struct _GlrTarget GlrTarget;
 
 GlrTarget *     glr_target_new             (GlrContext *context,
@@ -25,7 +23,5 @@ void            glr_target_get_size        (GlrTarget *self,
 void            glr_target_resize          (GlrTarget *self,
                                             guint      width,
                                             guint      height);
-
-G_END_DECLS
 
 #endif /* _GLR_TARGET_H_ */

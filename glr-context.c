@@ -1,20 +1,12 @@
 #include "glr-context.h"
 
 #include <EGL/egl.h>
-#include <glib.h>
 #include "glr-priv.h"
-#include <math.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-
-#define DEFAULT_NUM_ROUND_CORNER_VERTICES 32
 
 struct _GlrContext
 {
   gint ref_count;
-  pid_t tid;
 
   EGLDisplay egl_display;
   EGLContext gl_context;
@@ -38,19 +30,6 @@ typedef struct
   gpointer data;
   GCond *cond;
 } GlrDeferred;
-
-static const gfloat rect_vertices[] = {
-   0.0,  0.0,
-   1.0,  0.0,
-   1.0,  1.0,
-   0.0,  1.0,
-};
-
-static pid_t
-gettid (void)
-{
-  return (pid_t) syscall (SYS_gettid);
-}
 
 static void
 glr_context_free (GlrContext *self)
@@ -245,7 +224,6 @@ glr_context_new (void)
 
   self = g_slice_new0 (GlrContext);
   self->ref_count = 1;
-  self->tid = gettid ();
 
   /* GL thread */
   self->gl_thread_quit = FALSE;
