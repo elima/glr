@@ -243,6 +243,98 @@ find_surface_for_glyph (GlrTexCache *self,
   return column;
 }
 
+static const GlrTexSurface *
+lookup_font_glyph (GlrTexCache *self,
+                   const gchar *surface_id,
+                   FT_Face      face,
+                   gsize        font_size,
+                   guint32      glyph_index)
+{
+  GlrTexSurface *surface = NULL;
+
+  /* set char size */
+  gint err;
+  /* @FIXME: read device resolution from GlrTarget */
+  err = FT_Set_Char_Size (face,             /* handle to face object           */
+                          0,                /* char_width in 1/64th of points  */
+                          font_size * 64,   /* char_height in 1/64th of points */
+                          96,               /* horizontal device resolution    */
+                          96);              /* vertical device resolution      */
+  if (err != 0)
+    {
+      g_printerr ("Error setting the face size: %d\n", err);
+      goto out;
+    }
+
+  /* load glyph */
+  err = FT_Load_Glyph (face, glyph_index, FT_LOAD_NO_BITMAP);
+  if (err != 0)
+    {
+      g_printerr ("Error loading glyph: %d\n", err);
+      goto out;
+    }
+
+  /* render glyph if it is not embedded bitmap */
+  if (face->glyph->format != FT_GLYPH_FORMAT_BITMAP)
+    {
+      err = FT_Render_Glyph (face->glyph, FT_RENDER_MODE_LCD);
+      if (err != 0)
+        {
+          g_printerr ("Error rendering glyph: %d\n", err);
+          goto out;
+        }
+    }
+
+  /* upload glyph bitmap to texture */
+  FT_Bitmap bmp = face->glyph->bitmap;
+  TexColumn *column = find_surface_for_glyph (self, bmp.width + 1, bmp.rows + 1);
+  if (column == NULL)
+    {
+      /* @FIXME: no space found for the new glyph,
+         we need a flushing mechanism */
+      g_printerr ("Out of space in the texture cache\n");
+      goto out;
+    }
+
+  guint8 *buf = g_new (guint8, bmp.pitch * bmp.rows);
+  memcpy (buf, bmp.buffer, bmp.pitch * bmp.rows);
+
+  GlrCmdUploadToTex *data = g_new0 (GlrCmdUploadToTex, 1);
+  data->texture_id = column->tex_id;
+  data->x_offset = column->x + 1;
+  data->y_offset = column->first_y + 1;
+  data->width = bmp.width;
+  data->height = bmp.rows;
+  data->buffer = buf;
+  data->format = GL_RED;
+  data->type = GL_UNSIGNED_BYTE;
+
+  glr_context_queue_command (self->context,
+                             GLR_CMD_UPLOAD_TO_TEX,
+                             data,
+                             NULL);
+
+  surface = g_slice_new (GlrTexSurface);
+  surface->tex_id = column->tex_id;
+  surface->left = (column->x + 1) / ((gfloat) GLYPH_TEX_WIDTH);
+  surface->top = (column->first_y + 1) / (gfloat) GLYPH_TEX_HEIGHT;
+  surface->width = bmp.width / ((gfloat) GLYPH_TEX_WIDTH);
+  surface->height = bmp.rows / ((gfloat) GLYPH_TEX_HEIGHT);
+  surface->pixel_left = face->glyph->bitmap_left;
+  surface->pixel_top = face->glyph->bitmap_top;
+  surface->pixel_width = bmp.width / 3;
+  surface->pixel_height = bmp.rows;
+
+  column->first_y += bmp.rows + 1;
+
+  g_hash_table_insert (self->font_entries,
+                       g_strdup (surface_id),
+                       surface);
+
+ out:
+  return surface;
+}
+
 /* internal API */
 
 GlrTexCache *
@@ -314,7 +406,6 @@ glr_tex_cache_lookup_face (GlrTexCache *self,
       face = load_font_face (self, face_filename, face_index);
       if (face == NULL)
         {
-          /* @TODO: font face could not be loaded, throw error */
           g_free (face_id);
           return NULL;
         }
@@ -331,17 +422,17 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
                                  const gchar *face_filename,
                                  guint        face_index,
                                  gsize        font_size,
-                                 guint32      unicode_char)
+                                 guint32      code_point)
 {
   FT_Face face;
   gchar *surface_id;
-  GlrTexSurface *surface = NULL;
+  const GlrTexSurface *surface = NULL;
 
   surface_id = g_strdup_printf ("%s:%u:%lu:%u",
                                 face_filename,
                                 face_index,
                                 font_size,
-                                unicode_char);
+                                code_point);
   surface = g_hash_table_lookup (self->font_entries, surface_id);
   if (surface != NULL)
     goto out;
@@ -354,88 +445,11 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
       goto out;
     }
 
-  // set char size
-  gint err;
-  /* @FIXME: read device resolution from GlrTarget */
-  err = FT_Set_Char_Size (face,             /* handle to face object           */
-                          0,                /* char_width in 1/64th of points  */
-                          font_size * 64,   /* char_height in 1/64th of points */
-                          96,               /* horizontal device resolution    */
-                          96);              /* vertical device resolution      */
-  if (err != 0)
-    {
-      g_printerr ("Error setting the face size: %d\n", err);
-      goto out;
-    }
-
-  // get glyph index
-  FT_UInt glyph_index;
-  glyph_index = FT_Get_Char_Index (face, unicode_char);
-
-  // load glyph
-  err = FT_Load_Glyph (face, glyph_index, FT_LOAD_NO_BITMAP);
-  if (err != 0)
-    {
-      g_printerr ("Error loading glyph: %d\n", err);
-      goto out;
-    }
-
-  // render glyph if it is not embedded bitmap
-  if (face->glyph->format != FT_GLYPH_FORMAT_BITMAP)
-    {
-      err = FT_Render_Glyph (face->glyph, FT_RENDER_MODE_LCD);
-      if (err != 0)
-        {
-          g_printerr ("Error rendering glyph: %d\n", err);
-          goto out;
-        }
-    }
-
-  /* upload glyph bitmap to texture */
-  FT_Bitmap bmp = face->glyph->bitmap;
-  TexColumn *column = find_surface_for_glyph (self, bmp.width + 1, bmp.rows + 1);
-  if (column == NULL)
-    {
-      /* @FIXME: no space found for the new glyph,
-         we need a flushing mechanism */
-      g_printerr ("Out of space in the texture cache\n");
-      goto out;
-    }
-
-  guint8 *buf = g_new (guint8, bmp.pitch * bmp.rows);
-  memcpy (buf, bmp.buffer, bmp.pitch * bmp.rows);
-
-  GlrCmdUploadToTex *data = g_new0 (GlrCmdUploadToTex, 1);
-  data->texture_id = column->tex_id;
-  data->x_offset = column->x + 1;
-  data->y_offset = column->first_y + 1;
-  data->width = bmp.width;
-  data->height = bmp.rows;
-  data->buffer = buf;
-  data->format = GL_RED;
-  data->type = GL_UNSIGNED_BYTE;
-
-  glr_context_queue_command (self->context,
-                             GLR_CMD_UPLOAD_TO_TEX,
-                             data,
-                             NULL);
-
-  surface = g_slice_new (GlrTexSurface);
-  surface->tex_id = column->tex_id;
-  surface->left = (column->x + 1) / ((gfloat) GLYPH_TEX_WIDTH);
-  surface->top = (column->first_y + 1) / (gfloat) GLYPH_TEX_HEIGHT;
-  surface->width = bmp.width / ((gfloat) GLYPH_TEX_WIDTH);
-  surface->height = bmp.rows / ((gfloat) GLYPH_TEX_HEIGHT);
-  surface->pixel_left = face->glyph->bitmap_left;
-  surface->pixel_top = face->glyph->bitmap_top;
-  surface->pixel_width = bmp.width / 3;
-  surface->pixel_height = bmp.rows;
-
-  column->first_y += bmp.rows + 1;
-
-  g_hash_table_insert (self->font_entries,
-                       g_strdup (surface_id),
-                       surface);
+  surface = lookup_font_glyph (self,
+                               surface_id,
+                               face,
+                               font_size,
+                               code_point);
 
  out:
   g_free (surface_id);

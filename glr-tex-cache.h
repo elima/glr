@@ -31,6 +31,7 @@ const GlrTexSurface * glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
                                                        guint        face_index,
                                                        gsize        font_size,
                                                        guint32      unicode_char);
+
 FT_Face               glr_tex_cache_lookup_face       (GlrTexCache *self,
                                                        const gchar *face_filename,
                                                        guint        face_index);
