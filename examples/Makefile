@@ -1,4 +1,4 @@
-PKG_CONFIG_LIBS=glib-2.0 x11 egl
+PKG_CONFIG_LIBS=glib-2.0 x11 egl freetype2 harfbuzz
 LIBS=-lm -lglr -lGL
 CFLAGS=-ggdb -O0 -L.. -Wall -DFONTS_DIR=\"`pwd`/fonts/\"
 SOURCES=utils.c
@@ -9,7 +9,8 @@ examples: \
 	rects-threaded \
 	rects-and-text \
 	layers \
-	borders
+	borders \
+	text-layout
 
 rects-and-text: rects-and-text.c ${SOURCES}
 	gcc ${CFLAGS} \
@@ -42,3 +43,11 @@ borders: borders.c ${SOURCES}
 		${SOURCES} \
 		borders.c \
 		-o borders
+
+text-layout: text-layout.c ${SOURCES}
+	gcc ${CFLAGS} \
+		`pkg-config --libs --cflags ${PKG_CONFIG_LIBS}` \
+		${LIBS} \
+		${SOURCES} \
+		text-layout.c \
+		-o text-layout
