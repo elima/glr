@@ -19,6 +19,7 @@ static GlrLayer *layer1 = NULL;
 static GlrLayer *layer2 = NULL;
 
 static guint window_width, window_height;
+static gfloat zoom_factor = 1.0;
 
 static void
 draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
@@ -29,6 +30,8 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
   guint width, height;
 
   glr_target_get_size (target, &width, &height);
+  width *= zoom_factor;
+  height *= zoom_factor;
 
   for (i = 0; i < scale; i++)
     for (j = 0; j < scale; j++)
@@ -69,8 +72,10 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
 }
 
 static void
-draw_func (guint frame, gpointer user_data)
+draw_func (guint frame, gfloat _zoom_factor, gpointer user_data)
 {
+  zoom_factor = _zoom_factor;
+
   glr_canvas_start_frame (canvas);
   glr_canvas_clear (canvas, glr_color_from_rgba (255, 255, 255, 255));
 

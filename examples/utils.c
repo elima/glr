@@ -21,7 +21,10 @@ static DrawCallback draw_callback = NULL;
 static ResizeCallback resize_callback = NULL;
 static gpointer callback_user_data = NULL;
 
+#define ZOOM_FACTOR_DELTA 1.2
+
 static guint width, height;
+static gfloat zoom_factor = 1.0;
 
 static void
 log_times_per_second (void)
@@ -228,7 +231,7 @@ utils_main_loop (DrawCallback   draw_cb,
       frame++;
 
       if (draw_callback != NULL)
-        draw_callback (frame, callback_user_data);
+        draw_callback (frame, zoom_factor, callback_user_data);
 
       eglSwapBuffers (egl_display, egl_surface);
       log_times_per_second ();
@@ -252,6 +255,16 @@ utils_main_loop (DrawCallback   draw_cb,
               else if (xev.xkey.keycode == 9)
                 {
                   quit = 1;
+                }
+              // ctrl+ to zoom in
+              else if (xev.xkey.keycode == 21 && xev.xkey.state & ControlMask)
+                {
+                  zoom_factor *= ZOOM_FACTOR_DELTA;
+                }
+              // ctrl- to zoom out
+              else if (xev.xkey.keycode == 20 && xev.xkey.state & ControlMask)
+                {
+                  zoom_factor /= ZOOM_FACTOR_DELTA;
                 }
             }
           else if (xev.type == ConfigureNotify)

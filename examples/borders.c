@@ -16,6 +16,7 @@ static GlrCanvas *canvas = NULL;
 static GlrLayer *layer = NULL;
 
 static guint window_width, window_height;
+static gfloat zoom_factor = 1.0;
 
 static void
 draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
@@ -33,10 +34,10 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
   bg_color = glr_color_from_rgba (32, 64, 64, 128);
 
   glr_target_get_size (target, &width, &height);
+  width *= zoom_factor;
+  height *= zoom_factor;
   rect_width = (width - padding * 2) / 6 - padding;
   rect_height = (height - padding * 2) / 3 - padding;
-
-  // glr_layer_translate (layer, 0.0, 0.0 + anim*250);
 
   glr_layer_rotate (layer, 0.0);
   glr_layer_scale (layer, 1.0, 1.0);
@@ -214,8 +215,10 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
 }
 
 static void
-draw_func (guint frame, gpointer user_data)
+draw_func (guint frame, gfloat _zoom_factor, gpointer user_data)
 {
+  zoom_factor = _zoom_factor;
+
   glClearColor (0.0, 0.0, 0.0, 0.0);
   glClear (GL_COLOR_BUFFER_BIT);
 

@@ -23,6 +23,7 @@ static GlrCanvas *canvas = NULL;
 static GlrLayer *layer = NULL;
 
 static guint window_width, window_height;
+gfloat zoom_factor = 1.0;
 
 static void
 draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
@@ -38,6 +39,8 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
   font.face_index = 0;
 
   glr_target_get_size (target, &width, &height);
+  width *= zoom_factor;
+  height *= zoom_factor;
 
   gfloat offset_y = sin ((M_PI*2.0/120.0) * (frame % 120)) * 150.0;
   glr_layer_translate (layer, 0, offset_y);
@@ -81,8 +84,10 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
 }
 
 static void
-draw_func (guint frame, gpointer user_data)
+draw_func (guint frame, gfloat _zoom_factor, gpointer user_data)
 {
+  zoom_factor = _zoom_factor;
+
   glClearColor (1.0, 1.0, 1.0, 1.0);
   glClear (GL_COLOR_BUFFER_BIT);
 

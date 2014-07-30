@@ -3,7 +3,9 @@
 
 #include <glib.h>
 
-typedef void (* DrawCallback)   (guint frame, gpointer user_data);
+typedef void (* DrawCallback)   (guint    frame,
+                                 gfloat   zoom_factor,
+                                 gpointer user_data);
 typedef void (* ResizeCallback) (guint    width,
                                  guint    height,
                                  gpointer user_data);

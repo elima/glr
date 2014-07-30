@@ -18,6 +18,7 @@ static GlrCanvas *canvas = NULL;
 static GlrLayer *layers[MAX_LAYERS];
 
 static guint window_width, window_height;
+static gfloat zoom_factor = 1.0;
 
 static void
 draw_layer (GlrLayer  *layer,
@@ -29,6 +30,8 @@ draw_layer (GlrLayer  *layer,
   guint width, height;
 
   glr_target_get_size (target, &width, &height);
+  width *= zoom_factor;
+  height *= zoom_factor;
 
   for (i = 0; i < SCALE; i++)
     for (j = 0; j < SCALE; j++)
@@ -54,9 +57,11 @@ draw_layer (GlrLayer  *layer,
 }
 
 static void
-draw_func (guint frame, gpointer user_data)
+draw_func (guint frame, gfloat _zoom_factor, gpointer user_data)
 {
   gint i;
+
+  zoom_factor = _zoom_factor;
 
   /* notify canvas that you want to start drawing for a new frame */
   glr_canvas_start_frame (canvas);
