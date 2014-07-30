@@ -50,6 +50,12 @@ void           glr_layer_draw_rect                   (GlrLayer *self,
                                                       GlrStyle *style);
 
 void           glr_layer_draw_char                   (GlrLayer *self,
+                                                      guint32   code_point,
+                                                      gfloat    left,
+                                                      gfloat    top,
+                                                      GlrFont  *font,
+                                                      GlrColor  color);
+void           glr_layer_draw_char_unicode           (GlrLayer *self,
                                                       guint32   unicode_char,
                                                       gfloat    left,
                                                       gfloat    top,

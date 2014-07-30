@@ -492,7 +492,7 @@ glr_layer_clip (GlrLayer *self,
 
 void
 glr_layer_draw_char (GlrLayer *self,
-                     guint32   unicode_char,
+                     guint32   code_point,
                      gfloat    left,
                      gfloat    top,
                      GlrFont  *font,
@@ -518,7 +518,7 @@ glr_layer_draw_char (GlrLayer *self,
                                              font->face,
                                              font->face_index,
                                              font->size,
-                                             unicode_char);
+                                             code_point);
   if (surface == NULL)
     {
       /* @FIXME: implement batch breaking */
@@ -551,6 +551,27 @@ glr_layer_draw_char (GlrLayer *self,
   config[0] |= surface->tex_id << 12;
 
   glr_batch_add_instance (batch, config, &layout);
+}
+
+void
+glr_layer_draw_char_unicode (GlrLayer *self,
+                             guint32   unicode_char,
+                             gfloat    left,
+                             gfloat    top,
+                             GlrFont  *font,
+                             GlrColor  color)
+{
+  FT_Face face;
+  FT_UInt glyph_index;
+
+  CHECK_LAYER_NOT_FINSHED (self);
+
+  face = glr_tex_cache_lookup_face (self->tex_cache,
+                                    font->face,
+                                    font->face_index);
+  glyph_index = FT_Get_Char_Index (face, unicode_char);
+
+  glr_layer_draw_char (self, glyph_index, left, top, font, color);
 }
 
 void

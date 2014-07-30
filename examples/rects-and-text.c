@@ -66,12 +66,12 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
             glr_layer_scale (layer, 1.0, 1.0);
             glr_layer_rotate (layer, (frame*2 + i + j) / 150.0 * 180.0);
             font.size = i % 4 == 0 ? FONT_SIZE + (i) * 1 : FONT_SIZE + scale - i;
-            glr_layer_draw_char (layer,
-                                 j % scale + 48,
-                                 i * width/scale - (j%2)*(width/scale),
-                                 j * height/scale,
-                                 &font,
-                                 glr_color_from_rgba (64, 64, 64, 255));
+            glr_layer_draw_char_unicode (layer,
+                                         j % scale + 48,
+                                         i * width/scale - (j%2)*(width/scale),
+                                         j * height/scale,
+                                         &font,
+                                         glr_color_from_rgba (64, 64, 64, 255));
           }
       }
 
