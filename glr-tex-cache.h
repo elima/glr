@@ -3,6 +3,8 @@
 
 #include <GL/gl.h>
 #include <glib.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 typedef struct _GlrTexCache GlrTexCache;
 
@@ -25,5 +27,8 @@ const GlrTexSurface * glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
                                                        guint        face_index,
                                                        gsize        font_size,
                                                        guint32      unicode_char);
+FT_Face               glr_tex_cache_lookup_face       (GlrTexCache *self,
+                                                       const gchar *face_filename,
+                                                       guint        face_index);
 
 #endif /* _GLR_TEX_CACHE_H_ */

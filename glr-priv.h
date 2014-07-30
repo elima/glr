@@ -3,7 +3,6 @@
 
 #include "glr-canvas.h"
 #include "glr-context.h"
-#include "glr-tex-cache.h"
 
 typedef enum
   {
@@ -75,8 +74,6 @@ typedef struct
 {
   GlrCanvas *canvas;
 } GlrCmdCommitCanvasFrame;
-
-GlrTexCache *          glr_context_get_texture_cache     (GlrContext *self);
 
 void                   glr_context_queue_command         (GlrContext *self,
                                                           GlrCmdType  type,

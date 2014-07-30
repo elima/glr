@@ -175,12 +175,6 @@ gl_thread_func (gpointer user_data)
 
 /* internal API */
 
-GlrTexCache *
-glr_context_get_texture_cache (GlrContext *self)
-{
-  return self->tex_cache;
-}
-
 void
 glr_context_queue_command (GlrContext *self,
                            GlrCmdType  type,
@@ -283,4 +277,10 @@ glr_context_unref (GlrContext *self)
 
   if (g_atomic_int_dec_and_test (&self->ref_count))
     glr_context_free (self);
+}
+
+GlrTexCache *
+glr_context_get_texture_cache (GlrContext *self)
+{
+  return self->tex_cache;
 }

@@ -2,8 +2,6 @@
 
 #include "glr-context.h"
 #include "glr-priv.h"
-#include <ft2build.h>
-#include FT_FREETYPE_H
 #include FT_GLYPH_H
 #include FT_LCD_FILTER_H
 #include FT_MODULE_H
@@ -301,6 +299,33 @@ glr_tex_cache_unref (GlrTexCache *self)
     glr_tex_cache_free (self);
 }
 
+FT_Face
+glr_tex_cache_lookup_face (GlrTexCache *self,
+                           const gchar *face_filename,
+                           guint        face_index)
+{
+  FT_Face face;
+  gchar *face_id;
+
+  face_id = g_strdup_printf ("%s:%u", face_filename, face_index);
+  face = g_hash_table_lookup (self->font_faces, face_id);
+  if (face == NULL)
+    {
+      face = load_font_face (self, face_filename, face_index);
+      if (face == NULL)
+        {
+          /* @TODO: font face could not be loaded, throw error */
+          g_free (face_id);
+          return NULL;
+        }
+
+      g_hash_table_insert (self->font_faces, g_strdup (face_id), face);
+    }
+  g_free (face_id);
+
+  return face;
+}
+
 const GlrTexSurface *
 glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
                                  const gchar *face_filename,
@@ -310,7 +335,6 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
 {
   FT_Face face;
   gchar *surface_id;
-  gchar *face_id;
   GlrTexSurface *surface = NULL;
 
   surface_id = g_strdup_printf ("%s:%u:%lu:%u",
@@ -322,21 +346,13 @@ glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
   if (surface != NULL)
     goto out;
 
-  face_id = g_strdup_printf ("%s:%u", face_filename, face_index);
-  face = g_hash_table_lookup (self->font_faces, face_id);
+  face = glr_tex_cache_lookup_face (self, face_filename, face_index);
   if (face == NULL)
     {
-      face = load_font_face (self, face_filename, face_index);
-      if (face == NULL)
-        {
-          /* @TODO: font face could not be loaded, throw error */
-          g_free (face_id);
-          goto out;
-        }
-
-      g_hash_table_insert (self->font_faces, g_strdup (face_id), face);
+      /* @TODO: font face could not be loaded, throw error */
+      g_printerr ("Failed to load font from '%s'\n", face_filename);
+      goto out;
     }
-  g_free (face_id);
 
   // set char size
   gint err;
