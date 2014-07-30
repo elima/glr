@@ -11,10 +11,14 @@ typedef struct _GlrTexCache GlrTexCache;
 typedef struct
 {
   GLuint tex_id;
+
   gfloat left;
   gfloat top;
   gfloat width;
   gfloat height;
+
+  gint16 pixel_left;
+  gint16 pixel_top;
   guint16 pixel_width;
   guint16 pixel_height;
 } GlrTexSurface;

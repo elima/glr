@@ -530,8 +530,8 @@ glr_layer_draw_char (GlrLayer *self,
   if (has_any_transform (&self->transform))
     encode_and_store_transform (batch, &self->transform, config);
 
-  layout.left = left + self->translate_x;
-  layout.top = top + self->translate_y;
+  layout.left = left + self->translate_x + surface->pixel_left;
+  layout.top = top + self->translate_y - surface->pixel_top;
   layout.width = surface->pixel_width;
   layout.height = surface->pixel_height;
 
