@@ -53,19 +53,19 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
   glr_layer_draw_rect (layer, padding, padding, rect_width, rect_height, &style);
 
   /* border radius 10px */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 10.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 10.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*2 + rect_width, padding,
                        rect_width, rect_height, &style);
 
   /* border radius 50px */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*3 + rect_width*2, padding,
                        rect_width, rect_height, &style);
 
   /* border radius 25px and rotating */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 25.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 25.0 * zoom_factor);
   glr_layer_rotate (layer, 0.0 - (frame*2) / 2000.0 * 180.0);
   glr_layer_draw_rect (layer,
                        padding*4 + rect_width*3, padding,
@@ -73,7 +73,7 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
   glr_layer_rotate (layer, 0.0);
 
   /* border radius 5px and scaled */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 5.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 5.0 * zoom_factor);
   glr_layer_scale (layer, (anim + M_PI/2.0) / 2.0, (anim + M_PI/2.0) / 2.0);
   glr_layer_draw_rect (layer,
                        padding*5 + rect_width*4, padding,
@@ -97,43 +97,43 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
                         glr_color_from_rgba (64, 64, 64, 200));
 
   /* width 1.0, no border radius */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 0.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 1.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 0.0 * zoom_factor);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 1.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding,
                        padding*2 + rect_height,
                        rect_width, rect_height, &style);
 
   /* width 3.0, border radius 10px */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 10.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 3.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 10.0 * zoom_factor);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 3.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*2 + rect_width,
                        padding*2 + rect_height,
                        rect_width, rect_height, &style);
 
   /* width 5.0, border radius 50px */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 5.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0 * zoom_factor);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 5.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*3 + rect_width*2,
                        padding*2 + rect_height,
                        rect_width, rect_height, &style);
 
   /* width 10.0, border radius 25px and rotating */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 25.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 25.0 * zoom_factor);
   glr_layer_rotate (layer, 0.0 - (frame*2) / 2000.0 * 180.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 10.0);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 10.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*4 + rect_width*3,
                        padding*2 + rect_height,
                        rect_width, rect_height, &style);
 
   /* width 25px, border radius 50px and scaled */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0 * zoom_factor);
   glr_layer_rotate (layer, 0.0);
   glr_layer_scale (layer, (anim + M_PI/2.0) / 2.0, (anim + M_PI/2.0) / 2.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 25.0);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 25.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*5 + rect_width*4,
                        padding*2 + rect_height,
@@ -141,8 +141,8 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
   glr_layer_scale (layer, 1.0, 1.0);
 
   /* no background, no border radius, and small rotation */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 0.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 1.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 0.0 * zoom_factor);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 1.0 * zoom_factor);
   glr_layer_rotate (layer, 7.0);
   glr_layer_draw_rect (layer,
                        padding*6 + rect_width*5,
@@ -156,43 +156,43 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
                             glr_color_from_rgba (255, 0, 0, 128));
 
   /* width 1.0, no border radius */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 0.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 1.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 0.0 * zoom_factor);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 1.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding,
                        padding*3 + rect_height*2,
                        rect_width, rect_height, &style);
 
   /* width 3.0, border radius 10px */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 10.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 3.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 10.0 * zoom_factor);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 3.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*2 + rect_width,
                        padding*3 + rect_height*2,
                        rect_width, rect_height, &style);
 
   /* width 5.0, border radius 50px */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 5.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0 * zoom_factor);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 5.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*3 + rect_width*2,
                        padding*3 + rect_height*2,
                        rect_width, rect_height, &style);
 
   /* width 10.0, border radius 25px and rotating */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 25.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 25.0 * zoom_factor);
   glr_layer_rotate (layer, 0.0 - (frame*2) / 2000.0 * 180.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 10.0);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 10.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*4 + rect_width*3,
                        padding*3 + rect_height*2,
                        rect_width, rect_height, &style);
 
   /* width 25px, border radius 50px and scaled */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 50.0 * zoom_factor);
   glr_layer_rotate (layer, 0.0);
   glr_layer_scale (layer, (anim + M_PI/2.0) / 2.0, (anim + M_PI/2.0) / 2.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 25.0);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 25.0 * zoom_factor);
   glr_layer_draw_rect (layer,
                        padding*5 + rect_width*4,
                        padding*3 + rect_height*2,
@@ -200,8 +200,8 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
   glr_layer_scale (layer, 1.0, 1.0);
 
   /* no background, no border radius, and small rotation */
-  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 0.0);
-  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 1.0);
+  glr_border_set_radius (&(style.border), GLR_BORDER_ALL, 0.0 * zoom_factor);
+  glr_border_set_width (&(style.border), GLR_BORDER_ALL, 1.0 * zoom_factor);
   glr_layer_rotate (layer, 7.0);
   glr_layer_draw_rect (layer,
                        padding*6 + rect_width*5,
