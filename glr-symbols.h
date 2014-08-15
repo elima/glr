@@ -1,18 +1,18 @@
 #ifndef _GLR_SYMBOLS_H_
 #define _GLR_SYMBOLS_H_
 
-#include <GL/gl.h>
+#include <GLES3/gl3.h>
 
-inline void   glGenFramebuffers         (GLsizei n, GLuint* ids);
-inline void   glDeleteFramebuffers      (GLsizei n, const GLuint *framebuffers);
-inline void   glBindFramebuffer         (GLenum target, GLuint framebuffer);
-inline void   glFramebufferTexture2D    (GLenum target,
+void   glGenFramebuffers                (GLsizei n, GLuint* ids);
+void   glDeleteFramebuffers             (GLsizei n, const GLuint *framebuffers);
+void   glBindFramebuffer                (GLenum target, GLuint framebuffer);
+void   glFramebufferTexture2D           (GLenum target,
                                          GLenum attachment,
                                          GLenum textarget,
                                          GLuint texture,
                                          GLint  level);
-inline GLenum glCheckFramebufferStatus  (GLenum target);
-inline void   glBlitFramebuffer         (GLint      srcX0,
+GLenum glCheckFramebufferStatus         (GLenum target);
+void   glBlitFramebuffer                (GLint      srcX0,
                                          GLint      srcY0,
                                          GLint      srcX1,
                                          GLint      srcY1,
@@ -23,69 +23,69 @@ inline void   glBlitFramebuffer         (GLint      srcX0,
                                          GLbitfield mask,
                                          GLenum     filter);
 
-inline GLuint glCreateProgram           (void);
-inline void   glDeleteProgram           (GLuint program);
-inline void   glLinkProgram             (GLuint program);
-inline void   glUseProgram              (GLuint program);
-inline GLint  glGetUniformLocation      (GLuint        program,
+GLuint glCreateProgram                  (void);
+void   glDeleteProgram                  (GLuint program);
+void   glLinkProgram                    (GLuint program);
+void   glUseProgram                     (GLuint program);
+GLint  glGetUniformLocation             (GLuint        program,
                                          const GLchar *name);
 
-inline GLuint glCreateShader            (GLenum shaderType);
-inline void   glDeleteShader            (GLuint shader);
-inline void   glCompileShader           (GLuint shader);
-inline void   glAttachShader            (GLuint program, GLuint shader);
-inline void   glShaderSource            (GLuint                shader,
+GLuint glCreateShader                   (GLenum shaderType);
+void   glDeleteShader                   (GLuint shader);
+void   glCompileShader                  (GLuint shader);
+void   glAttachShader                   (GLuint program, GLuint shader);
+void   glShaderSource                   (GLuint                shader,
                                          GLsizei               count,
                                          const GLchar * const *string,
                                          const GLint          *length);
-inline void   glGetShaderiv             (GLuint  shader,
+void   glGetShaderiv                    (GLuint  shader,
                                          GLenum  pname,
                                          GLint  *params);
-inline void   glGetShaderInfoLog        (GLuint   shader,
+void   glGetShaderInfoLog               (GLuint   shader,
                                          GLsizei  maxLength,
                                          GLsizei *length,
                                          GLchar  *infoLog);
 
-inline void   glUniform1ui              (GLint location, GLuint v0);
-inline void   glUniform1i               (GLint location, GLint v0);
+void   glUniform1ui                     (GLint location, GLuint v0);
+void   glUniform1i                      (GLint location, GLint v0);
 
-inline void   glBindAttribLocation      (GLuint        program,
+void   glBindAttribLocation             (GLuint        program,
                                          GLuint        index,
                                          const GLchar *name);
-inline void   glVertexAttribPointer     (GLuint        index,
+void   glVertexAttribPointer            (GLuint        index,
                                          GLint         size,
                                          GLenum        type,
                                          GLboolean     normalized,
                                          GLsizei       stride,
                                          const GLvoid *pointer);
-inline void   glVertexAttribDivisor     (GLuint index, GLuint divisor);
-inline void   glEnableVertexAttribArray (GLuint index);
-inline void   glDrawArraysInstanced     (GLenum  mode,
+void   glVertexAttribDivisor            (GLuint index, GLuint divisor);
+void   glEnableVertexAttribArray        (GLuint index);
+void   glDrawArraysInstanced            (GLenum  mode,
                                          GLint   first,
                                          GLsizei count,
                                          GLsizei primcount);
 
-inline void   glTexImage2DMultisample   (GLenum    target,
+void   glTexImage2DMultisample          (GLenum    target,
                                          GLsizei   samples,
                                          GLint     internalformat,
                                          GLsizei   width,
                                          GLsizei   height,
                                          GLboolean fixedsamplelocations);
 
-inline void   glGenRenderbuffers               (GLsizei  n,
-                                                GLuint  *renderbuffers);
-inline void   glRenderbufferStorageMultisample (GLenum  target,
-                                                GLsizei samples,
-                                                GLenum  internalformat,
-                                                GLsizei width,
-                                                GLsizei height);
-inline void   glFramebufferRenderbuffer        (GLenum target,
-                                                GLenum attachment,
-                                                GLenum renderbuffertarget,
-                                                GLuint renderbuffer);
-inline void   glBindRenderbuffer               (GLenum target,
-                                                GLuint renderbuffer);
-inline void   glDeleteRenderbuffers            (GLsizei       n,
-                                                const GLuint *renderbuffers);
+void   glGenRenderbuffers               (GLsizei  n,
+                                         GLuint  *renderbuffers);
+void   glRenderbufferStorageMultisample (GLenum  target,
+                                         GLsizei samples,
+                                         GLenum  internalformat,
+                                         GLsizei width,
+                                         GLsizei height);
+void   glFramebufferRenderbuffer        (GLenum target,
+                                         GLenum attachment,
+                                         GLenum renderbuffertarget,
+                                         GLuint renderbuffer);
+void   glBindRenderbuffer               (GLenum target,
+                                         GLuint renderbuffer);
+void   glDeleteRenderbuffers            (GLsizei       n,
+                                         const GLuint *renderbuffers);
 
 #endif /* _GLR_SYMBOLS_H_ */

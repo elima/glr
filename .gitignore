@@ -1,3 +1,4 @@
+build/
 libglr.so
 *.trace
 vgdump

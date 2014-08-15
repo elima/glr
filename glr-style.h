@@ -1,8 +1,7 @@
 #ifndef _GLR_STYLE_H_
 #define _GLR_STYLE_H_
 
-#include <GL/gl.h>
-#include <glib.h>
+#include <stdint.h>
 
 #define GLR_STYLE_DEFAULT {{{0}}};
 
@@ -38,26 +37,34 @@ typedef enum
 
 typedef enum
   {
-    GLR_BACKGROUND_NONE  =      0,
-    GLR_BACKGROUND_COLOR = 1 << 0,
-    GLR_BACKGROUND_IMAGE = 1 << 1
+    GLR_BACKGROUND_NONE            = 0,
+    GLR_BACKGROUND_COLOR           = 1,
+    GLR_BACKGROUND_IMAGE           = 2,
+    GLR_BACKGROUND_LINEAR_GRADIENT = 3,
+    GLR_BACKGROUND_RADIAL_GRADIENT = 4
   } GlrBackgroundType;
 
 typedef struct _GlrStyle      GlrStyle;
 typedef struct _GlrBorder     GlrBorder;
 typedef struct _GlrBackground GlrBackground;
-typedef guint32               GlrColor;
+typedef uint32_t              GlrColor;
 
 struct _GlrBackground
 {
-  guint type;
+  uint32_t type;
   GlrColor color;
+
+  // @FIXME: by now only 2 color steps are implemented: first and last
+  GlrColor linear_grad_colors[2];
+  float linear_grad_steps[2];
+  uint8_t linear_grad_steps_count;
+  float linear_grad_angle;
 };
 
 struct _GlrBorder
 {
-  gdouble width[4];
-  gdouble radius[4];
+  double width[4];
+  double radius[4];
   GlrColor color[4];
   GlrBorderStyle style[4];
 };
@@ -65,9 +72,9 @@ struct _GlrBorder
 typedef struct _GlrFont GlrFont;
 struct _GlrFont
 {
-  gchar *face;
-  guint face_index;
-  guint size;
+  char *face;
+  uint32_t face_index;
+  uint32_t size;
 };
 
 struct _GlrStyle
@@ -77,23 +84,27 @@ struct _GlrStyle
 };
 
 void          glr_border_set_width                  (GlrBorder *border,
-                                                     guint      which,
-                                                     gdouble    width);
+                                                     uint8_t    which,
+                                                     double     width);
 void          glr_border_set_color                  (GlrBorder *border,
-                                                     guint      which,
+                                                     uint8_t    which,
                                                      GlrColor   color);
 void          glr_border_set_radius                 (GlrBorder *border,
-                                                     guint      which,
-                                                     gdouble    radius);
+                                                     uint8_t    which,
+                                                     double     radius);
 
 void          glr_background_set_color              (GlrBackground *bg,
                                                      GlrColor       color);
+void          glr_background_set_linear_gradient    (GlrBackground *bg,
+                                                     float          angle,
+                                                     GlrColor       first_color,
+                                                     GlrColor       last_color);
 
-GlrColor      glr_color_from_rgba                   (guint8 red,
-                                                     guint8 green,
-                                                     guint8 blue,
-                                                     guint8 alpha);
-GlrColor      glr_color_from_hue                    (guint  hue,
-                                                     guint8 alpha);
+GlrColor      glr_color_from_rgba                   (uint8_t red,
+                                                     uint8_t green,
+                                                     uint8_t blue,
+                                                     uint8_t alpha);
+GlrColor      glr_color_from_hue                    (uint32_t hue,
+                                                     uint8_t  alpha);
 
 #endif /* _GLR_STYLE_H_ */

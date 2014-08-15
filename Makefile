@@ -1,29 +1,54 @@
-PKG_CONFIG_LIBS=glib-2.0 freetype2 egl
-LIBS=-lm -lGL
-CFLAGS=-ggdb -O0 -Wall -shared -fPIC -DCURRENT_DIR=\"`pwd`\"
+CURRENT_DIR = $(shell pwd)
+BUILD_DIR = $(CURRENT_DIR)/build/$(shell uname -m)
 
-all: libglr.so
+PKG_CONFIG_LIBS = glib-2.0 freetype2
+LIBS = -lm -lGLESv2 -lEGL
+CFLAGS = -ggdb -O0 -Wall -std=c99 -shared -fPIC \
+	-DCURRENT_DIR=\"`pwd`\" -I$(BUILD_DIR)
+SOURCES = \
+	glr-context.c \
+	glr-target.c \
+	glr-canvas.c \
+	glr-batch.c \
+	glr-tex-cache.c \
+	glr-style.c
+
+HEADERS = \
+	glr.h \
+	glr-priv.h \
+	glr-context.h \
+	glr-target.h \
+	glr-canvas.h \
+	glr-batch.h \
+	glr-tex-cache.h \
+	glr-style.h \
+	$(BUILD_DIR)/glr-shaders.h
+
+ifeq ($(GLR_BACKEND), fbdev)
+  LIBS += -lmali -L/usr/local/lib/mali/fbdev
+endif
+
+all: Makefile \
+	$(BUILD_DIR)/libglr.so
 	make -C examples
 
-libglr.so: Makefile \
-	glr-context.c glr-context.h \
-	glr-target.c glr-target.h \
-	glr-canvas.c glr-canvas.h \
-	glr-batch.c glr-batch.h \
-	glr-symbols.c glr-symbols.h \
-	glr-layer.c glr-layer.h \
-	glr-tex-cache.c glr-tex-cache.h \
-	glr.h glr-priv.h \
-	glr-style.c glr-style.h
+$(BUILD_DIR)/glr-shaders.h: vertex-shader-instanced-rects.glsl fragment-shader-instanced-rects.glsl
+	mkdir -p $(BUILD_DIR)
+	echo "const char *INSTANCED_FRAGMENT_SHADER_SRC =" > $@
+	sed -e "s/^\(.*\)$$/\"\1 \\\n\"/" ./fragment-shader-instanced-rects.glsl >> $@
+	echo ";\n" >> $@
+
+	echo "const char *INSTANCED_VERTEX_SHADER_SRC =" >> $@
+	sed -e "s/^\(.*\)$$/\"\1 \\\n\"/" ./vertex-shader-instanced-rects.glsl >> $@
+	echo ";" >> $@
+
+$(BUILD_DIR)/libglr.so: $(SOURCES) $(HEADERS)
+	mkdir -p $(BUILD_DIR)
 	gcc ${CFLAGS} \
 		`pkg-config --libs --cflags ${PKG_CONFIG_LIBS}` \
-		${LIBS} \
-		glr-context.c \
-		glr-target.c \
-		glr-canvas.c \
-		glr-batch.c \
-		glr-symbols.c \
-		glr-layer.c \
-		glr-tex-cache.c \
-		glr-style.c \
-		-o libglr.so
+		$(LIBS) \
+		$(SOURCES) \
+		-o $@
+
+clean:
+	rm -rf ./build

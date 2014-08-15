@@ -1,33 +1,28 @@
-#include <glib.h>
 #include <math.h>
-#include <stdio.h>
 
 #include "../glr.h"
 #include "utils.h"
 
 #define MSAA_SAMPLES 0
 
-#define WINDOW_WIDTH    1280
-#define WINDOW_HEIGHT    960
+#define WINDOW_WIDTH  1920
+#define WINDOW_HEIGHT 1080
 
-#define SCALE 160
+#define SCALE 80
 
 static GlrContext *context = NULL;
 static GlrTarget *target = NULL;
 static GlrCanvas *canvas = NULL;
-static GlrLayer *layer1 = NULL;
-static GlrLayer *layer2 = NULL;
 
-static guint window_width, window_height;
-static gfloat zoom_factor = 1.0;
+static uint32_t window_width, window_height;
+static float zoom_factor = 1.0;
 
 static void
-draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
+draw_frame (uint32_t frame)
 {
-  gint i, j;
-  gint scale = SCALE / 2;
-  guint frame = * (guint *) user_data;
-  guint width, height;
+  int i, j;
+  int scale = SCALE / 2;
+  uint32_t width, height;
 
   glr_target_get_size (target, &width, &height);
   width *= zoom_factor;
@@ -38,113 +33,110 @@ draw_layer_in_thread (GlrLayer *layer, gpointer user_data)
       {
         GlrStyle style = GLR_STYLE_DEFAULT;
         GlrColor color;
-        gdouble rotation = ((frame + i + j) / 50.0 * 180.0);
-        guint scaling = (layer == layer1) ? 60 : 75;
+        float rotation = (frame + i + j) / 10.0;
+        uint8_t step = (i * scale + j) % 2;
+        uint32_t scaling = step == 0 ? 75 : 60;
 
-        glr_layer_set_transform_origin (layer, -1.5, 0.5);
-        glr_layer_rotate (layer, layer == layer1 ? rotation : -rotation);
-        glr_layer_scale (layer,
-                         cos ((M_PI/scaling) * ((frame + i + j) % scaling)) + 1,
-                         cos ((M_PI/scaling) * ((frame + i + j) % scaling)) + 1);
+        glr_canvas_set_transform_origin (canvas,
+                                         -(width/scale/2.0),
+                                         height/scale/2.0,
+                                         0.0);
+        glr_canvas_rotate (canvas, 0.0, 0.0, rotation);
+        glr_canvas_scale (canvas,
+                          cos ((M_PI/scaling) * ((frame + i + j) % scaling)) + 1,
+                          cos ((M_PI/scaling) * ((frame + i + j) % scaling)) + 1,
+                          1.0);
+
         color = glr_color_from_hue (frame + i + j + ((i + j %2) * 3), 255);
-
-        if (layer == layer1)
+        if (step == 0)
           {
             glr_background_set_color (&(style.background), color);
           }
         else
           {
-            glr_border_set_width (&(style.border), GLR_BORDER_ALL, 1.0);
+            glr_border_set_width (&(style.border),
+                                  GLR_BORDER_ALL, 1.0 * zoom_factor);
             glr_border_set_color (&(style.border), GLR_BORDER_ALL, color);
           }
 
-        glr_layer_draw_rect (layer,
-                             i * width/scale + (layer == layer1 ? width/scale/2 : 0),
-                             j * height/scale,
-                             width/scale/2,
-                             height/scale/2,
-                             &style);
+        glr_canvas_draw_rect (canvas,
+                              i * width/scale + (step == 1 ? width/scale/2.0 : 0.0),
+                              j * height/scale + (step == 1 ? height/scale/2.0 : 0.0),
+                              width/scale/2.0,
+                              height/scale/2.0,
+                              &style);
       }
 
-  /* it is necessary to always call finish() on on a layer, otherwise
-     glr_canvas_finish_frame() will wait forever */
-  glr_layer_finish (layer);
+  glr_canvas_reset_transform (canvas);
+  glr_canvas_rotate (canvas,
+                     (M_PI*2.0 / 360.0) * (frame % 360),
+                     0.0,
+                     (M_PI*2.0 / 360.0) * (frame % 360));
+  glr_canvas_set_transform_origin (canvas, width/2.0, height/2.0, 0.0);
 }
 
 static void
-draw_func (guint frame, gfloat _zoom_factor, gpointer user_data)
+draw_func (uint32_t frame, float _zoom_factor, void *user_data)
 {
   zoom_factor = _zoom_factor;
 
-  glr_canvas_start_frame (canvas);
-  glr_canvas_clear (canvas, glr_color_from_rgba (255, 255, 255, 255));
+  glr_canvas_clear (canvas, glr_color_from_rgba (0, 0, 0, 255));
+  glr_canvas_reset_transform (canvas);
 
-  /* attach our two layers */
-  glr_canvas_attach_layer (canvas, 0, layer1);
-  glr_canvas_attach_layer (canvas, 0, layer2);
+  draw_frame (frame);
 
-  /* invalidate layer1 and draw it in a thread*/
-  glr_layer_redraw_in_thread (layer1, draw_layer_in_thread, &frame);
+  glr_canvas_flush (canvas);
 
-  /* invalidate layer2 and draw it in a thread*/
-  glr_layer_redraw_in_thread (layer2, draw_layer_in_thread, &frame);
+  // if canvas has a target, blit its framebuffer into default FBO
+  if (glr_canvas_get_target (canvas) != NULL)
+    {
+      uint32_t target_width, target_height;
+      glr_target_get_size (target, &target_width, &target_height);
 
-  /* finally, sync all layers and render */
-  glr_canvas_finish_frame (canvas);
+      glBindFramebuffer (GL_FRAMEBUFFER, 0);
+      glClearColor (1.0, 1.0, 1.0, 1.0);
+      glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  /* blit target's framebuffer into default FBO */
-  guint current_width, current_height;
-  glr_target_get_size (target, &current_width, &current_height);
-  glBindFramebuffer (GL_FRAMEBUFFER, 0);
-  glBindFramebuffer (GL_READ_FRAMEBUFFER, glr_target_get_framebuffer (target));
-  glBlitFramebuffer (0, 0,
-                     current_width, current_height,
-                     0, window_height - current_height,
-                     current_width, window_height,
-                     GL_COLOR_BUFFER_BIT,
-                     GL_NEAREST);
+      glBindFramebuffer (GL_READ_FRAMEBUFFER, glr_target_get_framebuffer (target));
+      glBlitFramebuffer (0, 0,
+                         target_width, target_height,
+                         0, window_height - target_height,
+                         target_width, window_height,
+                         GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+                         GL_NEAREST);
+    }
 }
 
 static void
-resize_func (guint width, guint height, gpointer user_data)
+resize_func (uint32_t width, uint32_t height, void *user_data)
 {
   glr_target_resize (target, width, height);
   window_width = width;
   window_height = height;
+
+  glViewport (0, 0, width, height);
 }
 
 int
 main (int argc, char *argv[])
 {
-  window_width = WINDOW_WIDTH;
-  window_height = WINDOW_HEIGHT;
-
   /* init windowing system */
-  utils_initialize_x11 (WINDOW_WIDTH, WINDOW_HEIGHT, "Rects");
-  utils_initialize_egl ();
-
-  /* init OpenGL */
-  glLineWidth (1.0);
+  utils_initialize_egl (WINDOW_WIDTH, WINDOW_HEIGHT, "Rects (threaded)");
 
   /* init glr */
   context = glr_context_new ();
   target = glr_target_new (context, WINDOW_WIDTH, WINDOW_HEIGHT, MSAA_SAMPLES);
-  canvas = glr_canvas_new (context, target);
-  layer1 = glr_layer_new (context);
-  layer2 = glr_layer_new (context);
+  canvas = glr_canvas_new (context, MSAA_SAMPLES > 0 ? target : NULL);
 
   /* start the show */
   utils_main_loop (draw_func, resize_func, NULL);
 
   /* clean up */
-  glr_layer_unref (layer1);
-  glr_layer_unref (layer2);
   glr_canvas_unref (canvas);
   glr_target_unref (target);
   glr_context_unref (context);
 
   utils_finalize_egl ();
-  utils_finalize_x11 ();
 
   return 0;
 }

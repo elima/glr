@@ -1,8 +1,6 @@
 #ifndef _GLR_CONTEXT_H_
 #define _GLR_CONTEXT_H_
 
-#include <GL/gl.h>
-#include <glib.h>
 #include "glr-tex-cache.h"
 
 typedef struct _GlrContext GlrContext;

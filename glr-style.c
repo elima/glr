@@ -1,5 +1,6 @@
 #include "glr-style.h"
 
+#include <glib.h>
 #include <stdlib.h>
 
 enum
@@ -11,7 +12,7 @@ enum
   };
 
 void
-glr_border_set_width (GlrBorder *border, guint which, gdouble width)
+glr_border_set_width (GlrBorder *border, uint8_t which, double width)
 {
   if ((which & GLR_BORDER_LEFT) > 0)
     border->width[BORDER_INDEX_LEFT] = width;
@@ -27,7 +28,7 @@ glr_border_set_width (GlrBorder *border, guint which, gdouble width)
 }
 
 void
-glr_border_set_color (GlrBorder *border, guint which, GlrColor color)
+glr_border_set_color (GlrBorder *border, uint8_t which, GlrColor color)
 {
   if ((which & GLR_BORDER_LEFT) > 0)
     border->color[BORDER_INDEX_LEFT] = color;
@@ -43,7 +44,7 @@ glr_border_set_color (GlrBorder *border, guint which, GlrColor color)
 }
 
 void
-glr_border_set_radius (GlrBorder *border, guint which, gdouble radius)
+glr_border_set_radius (GlrBorder *border, uint8_t which, double radius)
 {
   if ((which & GLR_BORDER_TOP_LEFT) > 0)
     border->radius[BORDER_INDEX_LEFT] = radius;
@@ -61,12 +62,28 @@ glr_border_set_radius (GlrBorder *border, guint which, gdouble radius)
 void
 glr_background_set_color (GlrBackground *bg, GlrColor color)
 {
-  bg->type |= GLR_BACKGROUND_COLOR;
+  bg->type = GLR_BACKGROUND_COLOR;
   bg->color = color;
 }
 
+void
+glr_background_set_linear_gradient (GlrBackground *bg,
+                                    float          angle,
+                                    GlrColor       first_color,
+                                    GlrColor       last_color)
+{
+  bg->type = GLR_BACKGROUND_LINEAR_GRADIENT;
+
+  bg->linear_grad_angle = angle;
+  bg->linear_grad_colors[0] = first_color;
+  bg->linear_grad_colors[1] = last_color;
+  bg->linear_grad_steps[0] = 0.0;
+  bg->linear_grad_steps[1] = 1.0;
+  bg->linear_grad_steps_count = 2;
+}
+
 GlrColor
-glr_color_from_rgba (guint8 red, guint8 green, guint8 blue, guint8 alpha)
+glr_color_from_rgba (uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
 {
   return
     red   << 24 |
@@ -76,12 +93,12 @@ glr_color_from_rgba (guint8 red, guint8 green, guint8 blue, guint8 alpha)
 }
 
 GlrColor
-glr_color_from_hue (guint hue, guint8 alpha)
+glr_color_from_hue (uint32_t hue, uint8_t alpha)
 {
-  gint red_shift = 180;
-  gint green_shift = 60;
-  gint blue_shift = -60;
-  gdouble r, g, b;
+  int32_t red_shift = 180;
+  int32_t green_shift = 60;
+  int32_t blue_shift = -60;
+  double r, g, b;
 
   r = (MAX (MIN ((180 - abs (180 - (hue + red_shift) % 360)), 120), 60) - 60) / 60.0;
   g = (MAX (MIN ((180 - abs (180 - (hue + green_shift) % 360)), 120), 60) - 60) / 60.0;

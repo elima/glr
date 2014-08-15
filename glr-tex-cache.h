@@ -1,8 +1,7 @@
 #ifndef _GLR_TEX_CACHE_H_
 #define _GLR_TEX_CACHE_H_
 
-#include <GL/gl.h>
-#include <glib.h>
+#include <GLES3/gl3.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
@@ -12,28 +11,28 @@ typedef struct
 {
   GLuint tex_id;
 
-  gfloat left;
-  gfloat top;
-  gfloat width;
-  gfloat height;
+  float left;
+  float top;
+  float width;
+  float height;
 
-  gint16 pixel_left;
-  gint16 pixel_top;
-  guint16 pixel_width;
-  guint16 pixel_height;
+  int16_t pixel_left;
+  int16_t pixel_top;
+  uint16_t pixel_width;
+  uint16_t pixel_height;
 } GlrTexSurface;
 
 GlrTexCache *         glr_tex_cache_ref               (GlrTexCache *self);
 void                  glr_tex_cache_unref             (GlrTexCache *self);
 
 const GlrTexSurface * glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
-                                                       const gchar *face_filename,
-                                                       guint        face_index,
-                                                       gsize        font_size,
-                                                       guint32      unicode_char);
+                                                       const char  *face_filename,
+                                                       uint8_t      face_index,
+                                                       size_t       font_size,
+                                                       uint32_t     unicode_char);
 
 FT_Face               glr_tex_cache_lookup_face       (GlrTexCache *self,
-                                                       const gchar *face_filename,
-                                                       guint        face_index);
+                                                       const char  *face_filename,
+                                                       uint8_t      face_index);
 
 #endif /* _GLR_TEX_CACHE_H_ */

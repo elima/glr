@@ -1,6 +1,7 @@
 #include "glr-tex-cache.h"
 
-#include "glr-context.h"
+#include <GLES3/gl3.h>
+#include <glib.h>
 #include "glr-priv.h"
 #include FT_GLYPH_H
 #include FT_LCD_FILTER_H
@@ -9,14 +10,15 @@
 
 #define MAX_GLYPH_TEXTURES 8
 
+// @FIXME: Don't hardcode texture sizes, read limits from environment
 #define GLYPH_TEX_WIDTH  1024
 #define GLYPH_TEX_HEIGHT 4096
 
 typedef struct
 {
-  guint x;
-  guint width;
-  guint first_y;
+  uint32_t x;
+  uint32_t width;
+  uint32_t first_y;
   GLuint tex_id;
 } TexColumn;
 
@@ -29,7 +31,7 @@ typedef struct
 
 struct _GlrTexCache
 {
-  gint ref_count;
+  int ref_count;
 
   GlrContext *context;
 
@@ -38,14 +40,16 @@ struct _GlrTexCache
   GHashTable *font_faces;
 
   Texture glyph_texs[MAX_GLYPH_TEXTURES];
-  guint num_glyph_texs;
-  guint current_glyph_tex;
+  uint32_t num_glyph_texs;
+  uint32_t current_glyph_tex;
+
+  GLuint tex_table[64];
 };
 
 static void
 glr_tex_cache_free (GlrTexCache *self)
 {
-  gint i;
+  int i;
 
   g_hash_table_unref (self->font_faces);
   g_hash_table_unref (self->font_entries);
@@ -74,10 +78,10 @@ free_tex_surface (GlrTexSurface *surface)
 
 static FT_Face
 load_font_face (GlrTexCache *self,
-                const gchar *face_filename,
-                guint        face_index)
+                const char  *face_filename,
+                uint32_t     face_index)
 {
-  gint err;
+  int err;
   FT_Face face;
 
   if (self->ft_lib == NULL)
@@ -112,7 +116,7 @@ load_font_face (GlrTexCache *self,
   return face;
 }
 
-static gint
+static int
 compare_column_widths (gconstpointer a, gconstpointer b)
 {
   const TexColumn *c1 = a;
@@ -140,32 +144,37 @@ allocate_new_glyph_texture (GlrTexCache *self)
   tex->columns = NULL;
   tex->right_most_column = NULL;
 
-  GlrCmdCreateTex *data = g_new0 (GlrCmdCreateTex, 1);
-  data->texture_id = self->num_glyph_texs - 1;
-  data->internal_format = GL_R8;
-  data->width = GLYPH_TEX_WIDTH;
-  data->height = GLYPH_TEX_HEIGHT;
-  data->format = GL_RED;
-  data->type = GL_UNSIGNED_BYTE;
-
-  glr_context_queue_command (self->context,
-                             GLR_CMD_CREATE_TEX,
-                             data,
-                             NULL);
-
   tex->id = self->num_glyph_texs - 1;
+
+  GLuint _tex;
+  glGenTextures (1, &_tex);
+  self->tex_table[tex->id] = _tex;
+  glActiveTexture (GL_TEXTURE0 + tex->id);
+  glBindTexture (GL_TEXTURE_2D, _tex);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexImage2D (GL_TEXTURE_2D,
+                0,
+                GL_R8,
+                GLYPH_TEX_WIDTH, GLYPH_TEX_HEIGHT,
+                0,
+                GL_RED,
+                GL_UNSIGNED_BYTE,
+                NULL);
 
   return tex;
 }
 
 static TexColumn *
 find_surface_for_glyph (GlrTexCache *self,
-                        guint        width,
-                        guint        height)
+                        uint32_t     width,
+                        uint32_t     height)
 {
   GList *node;
   TexColumn *column = NULL;
-  gint i;
+  int i;
   Texture *tex;
 
   if (width >= GLYPH_TEX_WIDTH || height >= GLYPH_TEX_HEIGHT)
@@ -245,15 +254,15 @@ find_surface_for_glyph (GlrTexCache *self,
 
 static const GlrTexSurface *
 lookup_font_glyph (GlrTexCache *self,
-                   const gchar *surface_id,
+                   const char  *surface_id,
                    FT_Face      face,
-                   gsize        font_size,
-                   guint32      glyph_index)
+                   size_t       font_size,
+                   uint32_t     glyph_index)
 {
   GlrTexSurface *surface = NULL;
 
   /* set char size */
-  gint err;
+  int err;
   /* @FIXME: read device resolution from GlrTarget */
   err = FT_Set_Char_Size (face,             /* handle to face object           */
                           0,                /* char_width in 1/64th of points  */
@@ -296,30 +305,23 @@ lookup_font_glyph (GlrTexCache *self,
       goto out;
     }
 
-  guint8 *buf = g_new (guint8, bmp.pitch * bmp.rows);
-  memcpy (buf, bmp.buffer, bmp.pitch * bmp.rows);
+  glActiveTexture (GL_TEXTURE0 + column->tex_id);
+  glBindTexture (GL_TEXTURE_2D, self->tex_table[column->tex_id]);
+  glTexSubImage2D (GL_TEXTURE_2D,
+                   0,
+                   column->x + 1, column->first_y + 1,
+                   bmp.width, bmp.rows,
+                   GL_RED,
+                   GL_UNSIGNED_BYTE,
+                   bmp.buffer);
 
-  GlrCmdUploadToTex *data = g_new0 (GlrCmdUploadToTex, 1);
-  data->texture_id = column->tex_id;
-  data->x_offset = column->x + 1;
-  data->y_offset = column->first_y + 1;
-  data->width = bmp.width;
-  data->height = bmp.rows;
-  data->buffer = buf;
-  data->format = GL_RED;
-  data->type = GL_UNSIGNED_BYTE;
-
-  glr_context_queue_command (self->context,
-                             GLR_CMD_UPLOAD_TO_TEX,
-                             data,
-                             NULL);
 
   surface = g_slice_new (GlrTexSurface);
   surface->tex_id = column->tex_id;
-  surface->left = (column->x + 1) / ((gfloat) GLYPH_TEX_WIDTH);
-  surface->top = (column->first_y + 1) / (gfloat) GLYPH_TEX_HEIGHT;
-  surface->width = bmp.width / ((gfloat) GLYPH_TEX_WIDTH);
-  surface->height = bmp.rows / ((gfloat) GLYPH_TEX_HEIGHT);
+  surface->left = (column->x + 1) / ((float) GLYPH_TEX_WIDTH);
+  surface->top = (column->first_y + 1) / (float) GLYPH_TEX_HEIGHT;
+  surface->width = bmp.width / ((float) GLYPH_TEX_WIDTH);
+  surface->height = bmp.rows / ((float) GLYPH_TEX_HEIGHT);
   surface->pixel_left = face->glyph->bitmap_left;
   surface->pixel_top = face->glyph->bitmap_top;
   surface->pixel_width = bmp.width / 3;
@@ -362,8 +364,8 @@ glr_tex_cache_new (GlrContext *context)
   glGetIntegerv (GL_MAX_TEXTURE_SIZE, &max_texture_size);
   // g_print ("%d\n", max_texture_size);
 
-  glEnable (GL_BLEND);
-  glEnable (GL_TEXTURE_2D);
+  /* texture id table */
+  memset (self->tex_table, 0x00, 64);
 
   return self;
 }
@@ -393,11 +395,11 @@ glr_tex_cache_unref (GlrTexCache *self)
 
 FT_Face
 glr_tex_cache_lookup_face (GlrTexCache *self,
-                           const gchar *face_filename,
-                           guint        face_index)
+                           const char  *face_filename,
+                           uint8_t      face_index)
 {
   FT_Face face;
-  gchar *face_id;
+  char *face_id;
 
   face_id = g_strdup_printf ("%s:%u", face_filename, face_index);
   face = g_hash_table_lookup (self->font_faces, face_id);
@@ -419,13 +421,13 @@ glr_tex_cache_lookup_face (GlrTexCache *self,
 
 const GlrTexSurface *
 glr_tex_cache_lookup_font_glyph (GlrTexCache *self,
-                                 const gchar *face_filename,
-                                 guint        face_index,
-                                 gsize        font_size,
-                                 guint32      code_point)
+                                 const char  *face_filename,
+                                 uint8_t      face_index,
+                                 size_t       font_size,
+                                 uint32_t     code_point)
 {
   FT_Face face;
-  gchar *surface_id;
+  char *surface_id;
   const GlrTexSurface *surface = NULL;
 
   surface_id = g_strdup_printf ("%s:%u:%lu:%u",

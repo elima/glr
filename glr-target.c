@@ -1,6 +1,6 @@
 #include "glr-target.h"
 
-#include "glr-symbols.h"
+#include <GLES3/gl3.h>
 
 struct _GlrTarget
 {
@@ -50,8 +50,6 @@ glr_target_new (GlrContext *context,
   self->width = width;
   self->height = height;
   g_mutex_init (&self->mutex);
-
-  glEnable (GL_MULTISAMPLE);
 
   glGenRenderbuffers (1, &self->fbo_render_buf);
   glBindRenderbuffer (GL_RENDERBUFFER, self->fbo_render_buf);
@@ -129,15 +127,13 @@ glr_target_resize (GlrTarget *self, guint width, guint height)
   self->width = width;
   self->height = height;
 
-  glr_context_lock_gl (self->context);
-
   glBindRenderbuffer (GL_RENDERBUFFER, self->fbo_render_buf);
+
   glRenderbufferStorageMultisample (GL_RENDERBUFFER,
                                     self->msaa_samples,
                                     GL_RGBA8,
                                     self->width,
                                     self->height);
 
-  glr_context_unlock_gl (self->context);
   g_mutex_unlock (&self->mutex);
 }

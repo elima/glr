@@ -5,105 +5,105 @@
 #define STRINGIFY(x) (const char *) #x
 #define glGetProcAddress(a) eglGetProcAddress (STRINGIFY (a))
 
-typedef void   (GLAPIENTRY *PFNGLGENFRAMEBUFFERS)        (GLsizei  n,
-                                                          GLuint  *ids);
-typedef void   (GLAPIENTRY *PFNGLDELETEFRAMEBUFFERS)     (GLsizei       n,
-                                                          const GLuint *framebuffers);
-typedef void   (GLAPIENTRY *PFNGLBINDFRAMEBUFFER)        (GLenum target,
-                                                          GLuint framebuffer);
-typedef void   (GLAPIENTRY *PFNGLFRAMEBUFFERTEXTURE2D)   (GLenum target,
-                                                          GLenum attachment,
-                                                          GLenum textarget,
-                                                          GLuint texture,
-                                                          GLint  level);
-typedef GLenum (GLAPIENTRY *PFNGLCHECKFRAMEBUFFERSTATUS) (GLenum target);
-typedef void   (GLAPIENTRY *PFNGLBLITFRAMEBUFFER)        (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
-                                                          GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
-                                                          GLbitfield mask, GLenum filter);
+typedef void   (GL_APIENTRY *PFNGLGENFRAMEBUFFERS)        (GLsizei  n,
+                                                           GLuint  *ids);
+typedef void   (GL_APIENTRY *PFNGLDELETEFRAMEBUFFERS)     (GLsizei       n,
+                                                           const GLuint *framebuffers);
+typedef void   (GL_APIENTRY *PFNGLBINDFRAMEBUFFER)        (GLenum target,
+                                                           GLuint framebuffer);
+typedef void   (GL_APIENTRY *PFNGLFRAMEBUFFERTEXTURE2D)   (GLenum target,
+                                                           GLenum attachment,
+                                                           GLenum textarget,
+                                                           GLuint texture,
+                                                           GLint  level);
+typedef GLenum (GL_APIENTRY *PFNGLCHECKFRAMEBUFFERSTATUS) (GLenum target);
+typedef void   (GL_APIENTRY *PFNGLBLITFRAMEBUFFER)        (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
+                                                           GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
+                                                           GLbitfield mask, GLenum filter);
 
-typedef GLuint (GLAPIENTRY *PFNGLCREATEPROGRAM)          (void);
-typedef void   (GLAPIENTRY *PFNGLDELETEPROGRAM)          (GLuint program);
-typedef void   (GLAPIENTRY *PFNGLLINKPROGRAM)            (GLuint program);
-typedef void   (GLAPIENTRY *PFNGLUSEPROGRAM)             (GLuint program);
-typedef GLint  (GLAPIENTRY *PFNGLGETUNIFORMLOCATION)     (GLuint        program,
-                                                          const GLchar *name);
+typedef GLuint (GL_APIENTRY *PFNGLCREATEPROGRAM)          (void);
+typedef void   (GL_APIENTRY *PFNGLDELETEPROGRAM)          (GLuint program);
+typedef void   (GL_APIENTRY *PFNGLLINKPROGRAM)            (GLuint program);
+typedef void   (GL_APIENTRY *PFNGLUSEPROGRAM)             (GLuint program);
+typedef GLint  (GL_APIENTRY *PFNGLGETUNIFORMLOCATION)     (GLuint        program,
+                                                           const GLchar *name);
 
-typedef GLuint (GLAPIENTRY *PFNGLCREATESHADER)           (GLenum shaderType);
-typedef void   (GLAPIENTRY *PFNGLDELETESHADER)           (GLuint shader);
-typedef void   (GLAPIENTRY *PFNGLCOMPILESHADER)          (GLuint shader);
-typedef void   (GLAPIENTRY *PFNGLATTACHSHADER)           (GLuint program,
-                                                          GLuint shader);
-typedef void   (GLAPIENTRY *PFNGLSHADERSOURCE)           (GLuint                shader,
-                                                          GLsizei               count,
-                                                          const GLchar * const *string,
-                                                          const GLint          *length);
-typedef void   (GLAPIENTRY *PFNGLGETSHADERIV)            (GLuint  shader,
-                                                          GLenum  pname,
-                                                          GLint  *params);
-typedef void   (GLAPIENTRY *PFNGLGETSHADERINFOLOG)       (GLuint   shader,
-                                                          GLsizei  maxLength,
-                                                          GLsizei *length,
-                                                          GLchar  *infoLog);
+typedef GLuint (GL_APIENTRY *PFNGLCREATESHADER)           (GLenum shaderType);
+typedef void   (GL_APIENTRY *PFNGLDELETESHADER)           (GLuint shader);
+typedef void   (GL_APIENTRY *PFNGLCOMPILESHADER)          (GLuint shader);
+typedef void   (GL_APIENTRY *PFNGLATTACHSHADER)           (GLuint program,
+                                                           GLuint shader);
+typedef void   (GL_APIENTRY *PFNGLSHADERSOURCE)           (GLuint                shader,
+                                                           GLsizei               count,
+                                                           const GLchar * const *string,
+                                                           const GLint          *length);
+typedef void   (GL_APIENTRY *PFNGLGETSHADERIV)            (GLuint  shader,
+                                                           GLenum  pname,
+                                                           GLint  *params);
+typedef void   (GL_APIENTRY *PFNGLGETSHADERINFOLOG)       (GLuint   shader,
+                                                           GLsizei  maxLength,
+                                                           GLsizei *length,
+                                                           GLchar  *infoLog);
 
-typedef void   (GLAPIENTRY *PFNGLUNIFORM1UI)             (GLint  location,
-                                                          GLuint v0);
-typedef void   (GLAPIENTRY *PFNGLUNIFORM1I)              (GLint  location,
-                                                          GLint v0);
+typedef void   (GL_APIENTRY *PFNGLUNIFORM1UI)             (GLint  location,
+                                                           GLuint v0);
+typedef void   (GL_APIENTRY *PFNGLUNIFORM1I)              (GLint  location,
+                                                           GLint v0);
 
-typedef void   (GLAPIENTRY *PFNGLBINDATTRIBLOCATION)     (GLuint        program,
-                                                          GLuint        index,
-                                                          const GLchar *name);
-typedef void   (GLAPIENTRY *PFNGLVERTEXATTRIBPOINTER)    (GLuint        index,
-                                                          GLint         size,
-                                                          GLenum        type,
-                                                          GLboolean     normalized,
-                                                          GLsizei       stride,
-                                                          const GLvoid *pointer);
-typedef void   (GLAPIENTRY *PFNGLVERTEXATTRIBDIVISOR)    (GLuint index,
-                                                          GLuint divisor);
-typedef void   (GLAPIENTRY *PFNGLENABLEVERTEXATTRIBARRAY) (GLuint index);
-typedef void   (GLAPIENTRY *PFNGLDRAWARRAYSINSTANCED)     (GLenum  mode,
-                                                           GLint   first,
-                                                           GLsizei count,
-                                                           GLsizei primcount);
+typedef void   (GL_APIENTRY *PFNGLBINDATTRIBLOCATION)     (GLuint        program,
+                                                           GLuint        index,
+                                                           const GLchar *name);
+typedef void   (GL_APIENTRY *PFNGLVERTEXATTRIBPOINTER)    (GLuint        index,
+                                                           GLint         size,
+                                                           GLenum        type,
+                                                           GLboolean     normalized,
+                                                           GLsizei       stride,
+                                                           const GLvoid *pointer);
+typedef void   (GL_APIENTRY *PFNGLVERTEXATTRIBDIVISOR)    (GLuint index,
+                                                           GLuint divisor);
+typedef void   (GL_APIENTRY *PFNGLENABLEVERTEXATTRIBARRAY) (GLuint index);
+typedef void   (GL_APIENTRY *PFNGLDRAWARRAYSINSTANCED)     (GLenum  mode,
+                                                            GLint   first,
+                                                            GLsizei count,
+                                                            GLsizei primcount);
 
-typedef void   (GLAPIENTRY *PFNGLTEXIMAGE2DMULTISAMPLE)  (GLenum    target,
-                                                          GLsizei   samples,
-                                                          GLint     internalformat,
-                                                          GLsizei   width,
-                                                          GLsizei   height,
-                                                          GLboolean fixedsamplelocations);
+typedef void   (GL_APIENTRY *PFNGLTEXIMAGE2DMULTISAMPLE)  (GLenum    target,
+                                                           GLsizei   samples,
+                                                           GLint     internalformat,
+                                                           GLsizei   width,
+                                                           GLsizei   height,
+                                                           GLboolean fixedsamplelocations);
 
-typedef void  (GLAPIENTRY *PFNGLGENRENDERBUFFERS)              (GLsizei  n,
-                                                                GLuint  *renderbuffers);
-typedef void (GLAPIENTRY *PFNGLRENDERBUFFERSTORAGEMULTISAMPLE) (GLenum  target,
-                                                                GLsizei samples,
-                                                                GLenum  internalformat,
-                                                                GLsizei width,
-                                                                GLsizei height);
-typedef void (GLAPIENTRY *PFNGLFRAMEBUFFERRENDERBUFFER)        (GLenum target,
-                                                                GLenum attachment,
-                                                                GLenum renderbuffertarget,
-                                                                GLuint renderbuffer);
-typedef void (GLAPIENTRY *PFNGLBINDRENDERBUFFER)               (GLenum target,
-                                                                GLuint renderbuffer);
-typedef void (GLAPIENTRY *PFNGLDELETERENDERBUFFERS)            (GLsizei       n,
-                                                                const GLuint *renderbuffers);
+typedef void  (GL_APIENTRY *PFNGLGENRENDERBUFFERS)              (GLsizei  n,
+                                                                 GLuint  *renderbuffers);
+typedef void (GL_APIENTRY *PFNGLRENDERBUFFERSTORAGEMULTISAMPLE) (GLenum  target,
+                                                                 GLsizei samples,
+                                                                 GLenum  internalformat,
+                                                                 GLsizei width,
+                                                                 GLsizei height);
+typedef void (GL_APIENTRY *PFNGLFRAMEBUFFERRENDERBUFFER)        (GLenum target,
+                                                                 GLenum attachment,
+                                                                 GLenum renderbuffertarget,
+                                                                 GLuint renderbuffer);
+typedef void (GL_APIENTRY *PFNGLBINDRENDERBUFFER)               (GLenum target,
+                                                                 GLuint renderbuffer);
+typedef void (GL_APIENTRY *PFNGLDELETERENDERBUFFERS)            (GLsizei       n,
+                                                                 const GLuint *renderbuffers);
 
-inline void
+void
 glGenFramebuffers (GLsizei n, GLuint* ids)
 {
   ((PFNGLGENFRAMEBUFFERS) glGetProcAddress (glGenFramebuffers)) (n, ids);
 }
 
-inline void
+void
 glBindFramebuffer (GLenum target, GLuint framebuffer)
 {
   ((PFNGLBINDFRAMEBUFFER) glGetProcAddress (glBindFramebuffer)) (target,
                                                                  framebuffer);
 }
 
-inline void
+void
 glGetShaderiv (GLuint  shader,
                GLenum  pname,
                GLint  *params)
@@ -111,14 +111,14 @@ glGetShaderiv (GLuint  shader,
   ((PFNGLGETSHADERIV) glGetProcAddress (glGetShaderiv)) (shader, pname, params);
 }
 
-inline void
+void
 glDeleteFramebuffers (GLsizei n, const GLuint *framebuffers)
 {
   ((PFNGLDELETEFRAMEBUFFERS)
    glGetProcAddress (glDeleteFramebuffers)) (n, framebuffers);
 }
 
-inline void
+void
 glFramebufferTexture2D (GLenum target,
                         GLenum attachment,
                         GLenum textarget,
@@ -133,7 +133,7 @@ glFramebufferTexture2D (GLenum target,
                                                level);
 }
 
-inline GLenum
+GLenum
 glCheckFramebufferStatus (GLenum target)
 {
   static PFNGLCHECKFRAMEBUFFERSTATUS pfn = NULL;
@@ -145,7 +145,7 @@ glCheckFramebufferStatus (GLenum target)
   return pfn (target);
 }
 
-inline void
+void
 glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                    GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                    GLbitfield mask, GLenum filter)
@@ -161,7 +161,7 @@ glBlitFramebuffer (GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
        filter);
 }
 
-inline GLuint
+GLuint
 glCreateProgram (void)
 {
   static PFNGLCREATEPROGRAM pfn = NULL;
@@ -172,7 +172,7 @@ glCreateProgram (void)
   return pfn ();
 }
 
-inline void
+void
 glDeleteProgram (GLuint program)
 {
   static PFNGLDELETEPROGRAM pfn = NULL;
@@ -184,7 +184,7 @@ glDeleteProgram (GLuint program)
   pfn (program);
 }
 
-inline void
+void
 glLinkProgram (GLuint program)
 {
   static PFNGLLINKPROGRAM pfn = NULL;
@@ -195,7 +195,7 @@ glLinkProgram (GLuint program)
   pfn (program);
 }
 
-inline void
+void
 glUseProgram (GLuint program)
 {
   static PFNGLUSEPROGRAM pfn = NULL;
@@ -206,7 +206,7 @@ glUseProgram (GLuint program)
   pfn (program);
 }
 
-inline GLint
+GLint
 glGetUniformLocation (GLuint program, const GLchar *name)
 {
   static PFNGLGETUNIFORMLOCATION pfn = NULL;
@@ -218,7 +218,7 @@ glGetUniformLocation (GLuint program, const GLchar *name)
   return pfn (program, name);
 }
 
-inline GLuint
+GLuint
 glCreateShader (GLenum shaderType)
 {
   static PFNGLCREATESHADER pfn = NULL;
@@ -229,7 +229,7 @@ glCreateShader (GLenum shaderType)
   return pfn (shaderType);
 }
 
-inline void
+void
 glDeleteShader (GLuint shader)
 {
   static PFNGLDELETESHADER pfn = NULL;
@@ -241,7 +241,7 @@ glDeleteShader (GLuint shader)
   pfn (shader);
 }
 
-inline void
+void
 glCompileShader (GLuint shader)
 {
   static PFNGLCOMPILESHADER pfn = NULL;
@@ -253,7 +253,7 @@ glCompileShader (GLuint shader)
   pfn (shader);
 }
 
-inline void
+void
 glAttachShader (GLuint program, GLuint shader)
 {
   static PFNGLATTACHSHADER pfn = NULL;
@@ -265,7 +265,7 @@ glAttachShader (GLuint program, GLuint shader)
   pfn (program, shader);
 }
 
-inline void
+void
 glShaderSource (GLuint                shader,
                 GLsizei               count,
                 const GLchar * const *string,
@@ -280,7 +280,7 @@ glShaderSource (GLuint                shader,
   pfn (shader, count, string, length);
 }
 
-inline void
+void
 glGetShaderInfoLog (GLuint   shader,
                     GLsizei  maxLength,
                     GLsizei *length,
@@ -295,7 +295,7 @@ glGetShaderInfoLog (GLuint   shader,
   pfn (shader, maxLength, length, infoLog);
 }
 
-inline void
+void
 glTexImage2DMultisample (GLenum    target,
                          GLsizei   samples,
                          GLint     internalformat,
@@ -312,7 +312,7 @@ glTexImage2DMultisample (GLenum    target,
   pfn (target, samples, internalformat, width, height, fixedsamplelocations);
 }
 
-inline void
+void
 glUniform1ui (GLint location, GLuint v0)
 {
   static PFNGLUNIFORM1UI pfn = NULL;
@@ -324,7 +324,7 @@ glUniform1ui (GLint location, GLuint v0)
   pfn (location, v0);
 }
 
-inline void
+void
 glUniform1i (GLint location, GLint v0)
 {
   static PFNGLUNIFORM1I pfn = NULL;
@@ -336,7 +336,7 @@ glUniform1i (GLint location, GLint v0)
   pfn (location, v0);
 }
 
-inline void
+void
 glBindAttribLocation (GLuint        program,
                       GLuint        index,
                       const GLchar *name)
@@ -350,7 +350,7 @@ glBindAttribLocation (GLuint        program,
   pfn (program, index, name);
 }
 
-inline void
+void
 glVertexAttribPointer (GLuint        index,
                        GLint         size,
                        GLenum        type,
@@ -367,7 +367,7 @@ glVertexAttribPointer (GLuint        index,
   pfn (index, size, type, normalized, stride, pointer);
 }
 
-inline void
+void
 glVertexAttribDivisor (GLuint index,
                        GLuint divisor)
 {
@@ -380,7 +380,7 @@ glVertexAttribDivisor (GLuint index,
   pfn (index, divisor);
 }
 
-inline void
+void
 glEnableVertexAttribArray (GLuint index)
 {
   static PFNGLENABLEVERTEXATTRIBARRAY pfn = NULL;
@@ -392,7 +392,7 @@ glEnableVertexAttribArray (GLuint index)
   pfn (index);
 }
 
-inline void
+void
 glDrawArraysInstanced (GLenum  mode,
                        GLint   first,
                        GLsizei count,
@@ -407,7 +407,7 @@ glDrawArraysInstanced (GLenum  mode,
   pfn (mode, first, count, primcount);
 }
 
-inline void
+void
 glGenRenderbuffers (GLsizei n, GLuint *renderbuffers)
 {
   static PFNGLGENRENDERBUFFERS pfn = NULL;
@@ -419,7 +419,7 @@ glGenRenderbuffers (GLsizei n, GLuint *renderbuffers)
   pfn (n, renderbuffers);
 }
 
-inline void
+void
 glRenderbufferStorageMultisample (GLenum  target,
                                   GLsizei samples,
                                   GLenum  internalformat,
@@ -435,7 +435,7 @@ glRenderbufferStorageMultisample (GLenum  target,
   pfn (target, samples, internalformat, width, height);
 }
 
-inline void
+void
 glFramebufferRenderbuffer (GLenum target,
                            GLenum attachment,
                            GLenum renderbuffertarget,
@@ -450,7 +450,7 @@ glFramebufferRenderbuffer (GLenum target,
   pfn (target, attachment, renderbuffertarget, renderbuffer);
 }
 
-inline void
+void
 glBindRenderbuffer (GLenum target, GLuint renderbuffer)
 {
   static PFNGLBINDRENDERBUFFER pfn = NULL;
@@ -462,7 +462,7 @@ glBindRenderbuffer (GLenum target, GLuint renderbuffer)
   pfn (target, renderbuffer);
 }
 
-inline void
+void
 glDeleteRenderbuffers (GLsizei n, const GLuint *renderbuffers)
 {
   static PFNGLDELETERENDERBUFFERS pfn = NULL;

@@ -1,70 +1,88 @@
 #include "glr-canvas.h"
 
+#include <GLES3/gl3.h>
 #include <glib.h>
+#include <assert.h>
 #include "glr-batch.h"
-#include "glr-layer.h"
 #include "glr-priv.h"
-#include "glr-symbols.h"
+#include "glr-shaders.h"
 #include <math.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define DYN_ATTRS_TEX_WIDTH  1024
-#define DYN_ATTRS_TEX_HEIGHT 1024
+#define M_PI 3.14159265358979323846
 
-#define LAYOUT_ATTR    0
-#define CONFIG_ATTR    1
+#define EQUALS(x, y)   (fabs (x - y) <= DBL_EPSILON * fabs (x + y))
+#define UNEQUALS(x, y) (fabs (x - y)  > DBL_EPSILON * fabs (x + y))
+
+#define LAYOUT_ATTR 0
+#define COLOR_ATTR  1
+#define CONFIG_ATTR 2
+
+#define INSTANCE_TYPE_MASK          0xC3FFFFFF
+#define BORDER_NUM_SAMPLES_MASK     0xFF0FFFFF
+#define BACKGROUND_NUM_SAMPLES_MASK 0xFFF0FFFF
+
+#define DEFAULT_EDGE_AA_OFFSET 1.0
+
+#define DEFAULT_Z_DEPTH 5000.0
+
+typedef float GlrColor4f[4];
+
+typedef float Mat4[4][4];
+typedef float Vec4[4];
+typedef float Vec3[3];
+
+typedef struct __attribute__((__packed__))
+{
+  Vec3 scale;
+  Vec3 rotate;
+  Vec3 translate;
+  Vec3 origin;
+} GlrTransform;
 
 struct _GlrCanvas
 {
-  gint ref_count;
+  int ref_count;
 
   GlrContext *context;
-
   GlrTarget *target;
 
   GLuint shader_program;
 
-  GLuint width_loc;
-  GLuint height_loc;
+  bool frame_initialized;
 
-  guint64 frame_count;
-  gboolean frame_started;
-  gboolean frame_initialized;
+  uint32_t clear_color;
+  bool pending_clear;
 
-  GLuint dyn_attrs_buffer_tex;
+  GlrTransform transform;
+  size_t current_transform_index;
+  GlrBatch *batch;
 
-  guint32 clear_color;
-  gboolean pending_clear;
+  float aa_offset;
+  float z_depth;
 
-  GMutex layers_mutex;
-  GQueue *attached_layers;
+  GLuint proj_matrix_loc;
+  GLuint transform_matrix_loc;
+  GLuint persp_matrix_loc;
+  GLuint aa_offset_loc;
 
-  GMutex commit_frame_mutex;
-  GCond commit_frame_cond;
+  GlrTexCache *tex_cache;
 };
-
-typedef struct
-{
-  guint index;
-  GlrLayer *layer;
-} LayerAttachment;
 
 static void
 glr_canvas_free (GlrCanvas *self)
 {
-  g_queue_free_full (self->attached_layers, (GDestroyNotify) glr_layer_unref);
-  g_mutex_clear (&self->layers_mutex);
-
   glDeleteProgram (self->shader_program);
 
-  glDeleteTextures (1, &self->dyn_attrs_buffer_tex);
-
-  glr_target_unref (self->target);
   glr_context_unref (self->context);
+  if (self->target != NULL)
+    glr_target_unref (self->target);
 
-  g_mutex_clear (&self->commit_frame_mutex);
-  g_cond_clear (&self->commit_frame_cond);
+  glr_batch_unref (self->batch);
+
+  glr_tex_cache_unref (self->tex_cache);
 
   g_slice_free (GlrCanvas, self);
   self = NULL;
@@ -72,20 +90,108 @@ glr_canvas_free (GlrCanvas *self)
   g_print ("GlrCanvas freed\n");
 }
 
-static gboolean
+static void
+copy_mat4 (Mat4 src, Mat4 dst)
+{
+  memcpy (&dst[0][0], &src[0][0], sizeof (Mat4));
+}
+
+static void
+multiply_mat4 (Mat4 a, Mat4 b, Mat4 r)
+{
+  int i, j, k;
+  Mat4 t;
+
+  memset (t, 0.0, sizeof (Mat4));
+
+  for (i = 0; i < 4; i++)
+    for (j = 0; j < 4; j++)
+      for (k = 0; k < 4; k++)
+        t[i][j] += a[i][k]*b[k][j];
+
+  memcpy (r, t, sizeof (Mat4));
+}
+
+static void
+matrix_from_transform (GlrTransform *transform, Mat4 result)
+{
+  GlrTransform t = *transform;
+  Mat4 mat;
+
+  Mat4 translate_mat = {
+    {                         1.0,                          0.0,                          0.0, 0.0},
+    {                         0.0,                          1.0,                          0.0, 0.0},
+    {                         0.0,                          0.0,                          1.0, 0.0},
+    {t.origin[0] + t.translate[0], t.origin[1] + t.translate[1], t.origin[2] + t.translate[2], 1.0}
+  };
+
+  Mat4 origin_mat = {
+    {         1.0,          0.0,          0.0, 0.0},
+    {         0.0,          1.0,          0.0, 0.0},
+    {         0.0,          0.0,          1.0, 0.0},
+    {-t.origin[0], -t.origin[1], -t.origin[2], 1.0}
+  };
+
+  float a_x = t.rotate[0];
+  float sin_a = sin (a_x);
+  float cos_a = cos (a_x);
+  Mat4 rot_x_mat = {
+    {1.0,    0.0,   0.0, 0.0},
+    {0.0,  cos_a, sin_a, 0.0},
+    {0.0, -sin_a, cos_a, 0.0},
+    {0.0,    0.0,   0.0, 1.0}
+  };
+
+  float a_y = t.rotate[1];
+  sin_a = sin (a_y);
+  cos_a = cos (a_y);
+  Mat4 rot_y_mat = {
+    { cos_a, 0.0, sin_a, 0.0},
+    {   0.0, 1.0,   0.0, 0.0},
+    {-sin_a, 0.0, cos_a, 0.0},
+    {   0.0, 0.0,   0.0, 1.0}
+  };
+
+  float a_z = t.rotate[2];
+  sin_a = sin (a_z);
+  cos_a = cos (a_z);
+  Mat4 rot_z_mat = {
+    { cos_a, sin_a, 0.0, 0.0},
+    {-sin_a, cos_a, 0.0, 0.0},
+    {   0.0,   0.0, 1.0, 0.0},
+    {   0.0,   0.0, 0.0, 1.0}
+  };
+
+  Mat4 scale_mat = {
+    { t.scale[0],        0.0,        0.0, 0.0},
+    {        0.0, t.scale[1],        0.0, 0.0},
+    {        0.0,        0.0, t.scale[2], 0.0},
+    {        0.0,        0.0,        0.0, 1.0}
+  };
+
+  multiply_mat4 (origin_mat, scale_mat, mat);
+  multiply_mat4 (mat, rot_z_mat, mat);
+  multiply_mat4 (mat, rot_y_mat, mat);
+  multiply_mat4 (mat, rot_x_mat, mat);
+  multiply_mat4 (mat, translate_mat, mat);
+
+  copy_mat4 (mat, result);
+}
+
+static bool
 print_shader_log (GLuint shader)
 {
-  GLint  length;
-  gchar buffer[1024];
+  GLint length;
+  char buffer[1024] = {0};
   GLint success;
 
   glGetShaderiv (shader, GL_INFO_LOG_LENGTH, &length);
   if (length == 0)
-    return TRUE;
+    return true;
 
   glGetShaderInfoLog (shader, 1024, NULL, buffer);
   if (strlen (buffer) > 0)
-    g_printerr ("Shader compilation log: %s", buffer);
+    printf ("Shader compilation log: %s\n", buffer);
 
   glGetShaderiv (shader, GL_COMPILE_STATUS, &success);
 
@@ -108,73 +214,63 @@ load_shader (const char *shader_source, GLenum type)
 static void
 clear_background (GlrCanvas *self)
 {
-  static const guint32 MASK_8_BIT = 0x000000FF;
+  static const uint32_t MASK_8_BIT = 0x000000FF;
 
-  glClearColor ( (self->clear_color >> 24              )  / 255.0,
+  glClearColor ( (self->clear_color >> 24              ) / 255.0,
                 ((self->clear_color >> 16) & MASK_8_BIT) / 255.0,
-                ((self->clear_color >>  8) & MASK_8_BIT) / 255.0001,
+                ((self->clear_color >>  8) & MASK_8_BIT) / 255.0,
                 ( self->clear_color        & MASK_8_BIT) / 255.0);
-  glClear (GL_COLOR_BUFFER_BIT);
-}
-
-static void
-free_layer_attachment (LayerAttachment *layer_attachment)
-{
-  glr_layer_unref (layer_attachment->layer);
-  g_slice_free (LayerAttachment, layer_attachment);
-}
-
-static gint
-sort_layers_func (LayerAttachment *layer1,
-                  LayerAttachment *layer2,
-                  gpointer         user_data)
-{
-  if (layer1->index < layer2->index)
-    return -1;
-  else if (layer1->index == layer2->index)
-    return 0;
-  else
-    return 1;
+  glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 static void
 initialize_frame_if_needed (GlrCanvas *self)
 {
-  guint32 width, height;
+  uint32_t width, height;
 
   if (self->frame_initialized)
     return;
 
-  self->frame_initialized = TRUE;
+  self->frame_initialized = true;
 
-  glBindFramebuffer (GL_FRAMEBUFFER,
-                     glr_target_get_framebuffer (self->target));
+  if (self->target != NULL)
+    {
+      glBindFramebuffer (GL_FRAMEBUFFER,
+                         glr_target_get_framebuffer (self->target));
+
+      glr_target_get_size (self->target, &width, &height);
+
+      glViewport (0, 0, width, height);
+    }
+  else
+    {
+      GLint viewport[4];
+
+      glGetIntegerv (GL_VIEWPORT, viewport);
+      width = (uint32_t) viewport[2];
+      height = (uint32_t) viewport[3];
+    }
+
+  glEnable (GL_BLEND);
+  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glEnable (GL_DEPTH_TEST);
+  glDisable (GL_CULL_FACE);
+
   glUseProgram (self->shader_program);
 
   if (self->pending_clear)
     {
       clear_background (self);
-      self->pending_clear = FALSE;
+      self->pending_clear = false;
     }
-
-  glEnable (GL_BLEND);
-  glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  glr_target_get_size (self->target, &width, &height);
-
-  glPushAttrib (GL_VIEWPORT_BIT);
-  glViewport (0, 0, width, height);
-
-  glUniform1ui (self->width_loc, width);
-  glUniform1ui (self->height_loc, height);
 
   /* @FIXME: get the glyph texture ids from texture cache,
      instead of hardcoding it here */
-  gint i;
+  int i;
   for (i = 0; i < 8; i++)
     {
       GLuint loc;
-      gchar *st;
+      char *st;
 
       st = g_strdup_printf ("glyph_cache[%d]", i);
       loc = glGetUniformLocation (self->shader_program, st);
@@ -182,63 +278,233 @@ initialize_frame_if_needed (GlrCanvas *self)
       g_free (st);
     }
 
-  /* bind the dyn attrs buffer texture */
-  glActiveTexture (GL_TEXTURE9);
-  glBindTexture (GL_TEXTURE_2D, self->dyn_attrs_buffer_tex);
+  // projection matrix
+  Mat4 proj_matrix = {
+    {2.0 / width,           0.0,                 0.0, 0.0},
+    {        0.0, -2.0 / height,                 0.0, 0.0},
+    {        0.0,           0.0, 2.0 / self->z_depth, 0.0},
+    {       -1.0,           1.0,                 0.0, 1.0}
+  };
+  glUniformMatrix4fv (self->proj_matrix_loc,
+                      1,
+                      GL_FALSE,
+                      &(proj_matrix[0][0]));
+
+  // @FIXME:
+  Mat4 transform_matrix;
+  GlrTransform t;
+
+  // @FIXME: do this only if perspective is enabled
+  memcpy (&t, &self->transform, sizeof (GlrTransform));
+  t.translate[2] += -(self->z_depth / 2.0);
+
+  // canvas' global transform matrix
+  matrix_from_transform (&t, transform_matrix);
+  glUniformMatrix4fv (self->transform_matrix_loc,
+                      1,
+                      GL_FALSE,
+                      &(transform_matrix[0][0]));
 }
 
 static void
-draw_batch (GlrBatch *batch, gpointer user_data)
+encode_and_store_transform (GlrCanvas         *self,
+                            float              left,
+                            float              top,
+                            GlrTransform      *transform,
+                            GlrInstanceConfig  config)
 {
-  GlrCanvas *self = user_data;
+  GlrTransform t;
 
-  glr_batch_draw (batch, self->shader_program);
-}
-
-static void
-flush (GlrCanvas *self)
-{
-  LayerAttachment *layer_attachment;
-
-  initialize_frame_if_needed (self);
-
-  g_mutex_lock (&self->layers_mutex);
-
-  while ((layer_attachment = g_queue_pop_head (self->attached_layers)) != NULL)
+  if (self->current_transform_index > 0)
     {
-      GQueue *batch_queue;
-
-      /* The call to glr_layer_get_batches() will block until finish()
-         is called on the layer, if it has not finished yet. */
-      batch_queue = glr_layer_get_batches (layer_attachment->layer);
-
-      /* execute each batched drawing in the layer, in order */
-      g_queue_foreach (batch_queue, (GFunc) draw_batch, self);
-
-      free_layer_attachment (layer_attachment);
+      config[1] = self->current_transform_index;
+      return;
     }
 
-  g_queue_free_full (self->attached_layers,
-                     (GDestroyNotify) free_layer_attachment);
-  self->attached_layers = g_queue_new ();
+  memcpy (&t, transform, sizeof (GlrTransform));
+  t.origin[0] += left;
+  t.origin[1] += top;
 
-  g_mutex_unlock (&self->layers_mutex);
+  Mat4 transform_matrix;
+  size_t offset;
+
+  // printf ("new transform encoded\n");
+
+  matrix_from_transform (&t, transform_matrix);
+  offset = glr_batch_add_dyn_attr (self->batch,
+                                   &(transform_matrix[0][0]),
+                                   sizeof (Mat4));
+  config[1] = offset;
+  self->current_transform_index = offset;
+}
+
+static bool
+has_any_transform (const GlrTransform *transform)
+{
+  return
+    UNEQUALS (transform->rotate[0], 0.0)
+    || UNEQUALS (transform->rotate[1], 0.0)
+    || UNEQUALS (transform->rotate[2], 0.0)
+
+    || UNEQUALS (transform->scale[0], 1.0)
+    || UNEQUALS (transform->scale[1], 1.0)
+    || UNEQUALS (transform->scale[2], 1.0)
+
+    || UNEQUALS (transform->translate[0], 0.0)
+    || UNEQUALS (transform->translate[1], 0.0)
+    || UNEQUALS (transform->translate[2], 0.0);
+}
+
+static void
+instance_config_set_type (GlrInstanceConfig config, GlrInstanceType type)
+{
+  /* bits 26 to 29 (4 bits) of config0 encode the instance type */
+  config[0] = (config[0] & INSTANCE_TYPE_MASK) | (type << 26);
+}
+
+static void
+encode_and_store_border (GlrBatch          *batch,
+                         GlrBorder         *border,
+                         GlrInstanceConfig  config)
+{
+  size_t offset;
+  float buf[16] = {0};
+  uint8_t num_samples = 0;
+
+  bool all_style_equal;
+  bool all_width_equal;
+  bool all_radius_equal;
+  bool all_color_equal;
+
+  all_style_equal = border->style[0] == border->style[1]
+    && border->style[0] == border->style[2]
+    && border->style[0] == border->style[3];
+
+  all_width_equal = EQUALS (border->width[0], border->width[1])
+    && EQUALS (border->width[0], border->width[2])
+    && EQUALS (border->width[0], border->width[3]);
+
+  all_radius_equal = EQUALS (border->radius[0], border->radius[1])
+    && EQUALS (border->radius[0], border->radius[2])
+    && EQUALS (border->radius[0], border->radius[3]);
+
+  all_color_equal = border->color[0] == border->color[1]
+    && border->color[0] == border->color[2]
+    && border->color[0] == border->color[3];
+
+  /* the simplest case: style, width, radius and color of all borders are equal */
+  if (all_style_equal && all_width_equal && all_radius_equal && all_color_equal)
+    {
+      /* this case is encoded in 1 dyn attr sample */
+      buf[0] = border->style[0];
+      buf[1] = border->width[0];
+      buf[2] = border->radius[0];
+      buf[3] = border->color[0];
+
+      num_samples = 1;
+    }
+
+  if (num_samples == 0)
+    return;
+
+  /* bits 20 to 23 (4 bits) of config0 encode the number of samples
+     that describe the border */
+  config[0] = (config[0] & BORDER_NUM_SAMPLES_MASK) | (num_samples << 20);
+
+  offset = glr_batch_add_dyn_attr (batch,
+                                   buf,
+                                   sizeof (float) * 4 * num_samples);
+
+  /* config2 encodes the offset of the border description */
+  config[2] = offset;
+}
+
+static void
+glr_color_decompose_float (GlrColor color, GlrColor4f color_4f)
+{
+  color_4f[0] = ((color >> 24) & 0xFF) / 255.0;
+  color_4f[1] = ((color >> 16) & 0xFF) / 255.0;
+  color_4f[2] = ((color >>  8) & 0xFF) / 255.0;
+  color_4f[3] = (color         & 0xFF) / 255.0;
+}
+
+static void
+encode_and_store_background (GlrBatch          *batch,
+                             GlrBackground     *bg,
+                             GlrInstanceConfig  config)
+{
+  goffset offset;
+  float buf[16] = {0};
+  uint8_t num_samples = 0;
+
+  if (bg->type == GLR_BACKGROUND_LINEAR_GRADIENT)
+    {
+      // pre-calculate linear gradient values
+      const float SEMI_DIAG_LENGTH = sqrt ((0.5*0.5)*2.0);
+      float angle = bg->linear_grad_angle;
+
+      if (angle < 0.0)
+        angle = M_PI*2.0 - fmod (fabs (angle), M_PI * 2.0);
+      else
+        angle = fmod (angle, M_PI * 2.0);
+
+      float gamma = M_PI/2.0;
+      if (angle < M_PI/2.0)
+        gamma -= angle;
+      else if (angle < M_PI)
+        gamma -= angle - M_PI/2.0;
+      else if (angle < M_PI/2.0*3.0)
+        gamma -= angle - M_PI;
+      else
+        gamma -= angle - M_PI/2.0*3.0;
+
+      float beta = M_PI/4.0 + gamma;
+      float length = SEMI_DIAG_LENGTH * sin (beta) * 2.0;
+
+      buf[0] = angle;
+      buf[1] = length;
+      buf[2] = gamma;
+
+      GlrColor4f color0, color1;
+      glr_color_decompose_float (bg->linear_grad_colors[0], color0);
+      glr_color_decompose_float (bg->linear_grad_colors[1], color1);
+
+      memcpy (&(buf[4]), color0, sizeof (GlrColor4f));
+      memcpy (&(buf[8]), color1, sizeof (GlrColor4f));
+
+      num_samples = 3;
+    }
+
+  if (num_samples == 0)
+    return;
+
+  // bits 16 to 19 (4 bits) of config0 encode the number of samples to describe
+  // the background
+  config[0] = (config[0] & BACKGROUND_NUM_SAMPLES_MASK) | (num_samples << 16);
+
+  offset = glr_batch_add_dyn_attr (batch,
+                                   buf,
+                                   sizeof (float) * 4 * num_samples);
+
+  // config3 encodes the offset of the background description
+  config[3] = offset;
+}
+
+static bool
+has_any_border (const GlrBorder *border)
+{
+  return UNEQUALS (border->width[0], 0.0)
+    || UNEQUALS (border->width[1], 0.0)
+    || UNEQUALS (border->width[2], 0.0)
+    || UNEQUALS (border->width[3], 0.0)
+
+    || UNEQUALS (border->radius[0], 0.0)
+    || UNEQUALS (border->radius[1], 0.0)
+    || UNEQUALS (border->radius[2], 0.0)
+    || UNEQUALS (border->radius[3], 0.0);
 }
 
 /* internal API */
-void
-glr_canvas_commit_frame (GlrCanvas *self)
-{
-  /* attention! this runs in GlrContext's GL thread! */
-
-  flush (self);
-  glPopAttrib ();
-  glFlush ();
-
-  g_mutex_lock (&self->commit_frame_mutex);
-  self->frame_started = FALSE;
-  g_mutex_unlock (&self->commit_frame_mutex);
-}
 
 /* public API */
 
@@ -246,54 +512,31 @@ GlrCanvas *
 glr_canvas_new (GlrContext *context, GlrTarget *target)
 {
   GlrCanvas *self;
-  GError *error = NULL;
-
-  gchar *vertex_src;
-  gchar *fragment_src;
 
   GLuint vertex_shader;
   GLuint fragment_shader;
 
-  GLuint uniform_loc;
+  assert (context != NULL);
 
   self = g_slice_new0 (GlrCanvas);
   self->ref_count = 1;
 
-  self->target = glr_target_ref (target);
   self->context = glr_context_ref (context);
 
-  /* @FIXME: load the shader sources at compile time */
-  if (! g_file_get_contents (CURRENT_DIR "/vertex.glsl",
-                             &vertex_src,
-                             NULL,
-                             &error))
-    {
-      g_printerr ("Failed to load vertex shader source: %s\n", error->message);
-      g_error_free (error);
-      return NULL;
-    }
-  if (! g_file_get_contents (CURRENT_DIR "/fragment.glsl",
-                             &fragment_src,
-                             NULL,
-                             &error))
-    {
-      g_printerr ("Failed to load fragment shader source: %s\n", error->message);
-      g_error_free (error);
-      return NULL;
-    }
+  if (target != NULL)
+    self->target = glr_target_ref (target);
 
   // setup the shaders
-  vertex_shader = load_shader (vertex_src, GL_VERTEX_SHADER);
-  fragment_shader = load_shader (fragment_src, GL_FRAGMENT_SHADER);
-  g_free (vertex_src);
-  g_free (fragment_src);
+  vertex_shader = load_shader (INSTANCED_VERTEX_SHADER_SRC, GL_VERTEX_SHADER);
+  fragment_shader = load_shader (INSTANCED_FRAGMENT_SHADER_SRC, GL_FRAGMENT_SHADER);
 
   self->shader_program = glCreateProgram ();
   glAttachShader (self->shader_program, vertex_shader);
   glAttachShader (self->shader_program, fragment_shader);
 
-  glBindAttribLocation (self->shader_program, LAYOUT_ATTR, "lyt");
-  glBindAttribLocation (self->shader_program, CONFIG_ATTR, "config");
+  glBindAttribLocation (self->shader_program, LAYOUT_ATTR, "lyt_attr");
+  glBindAttribLocation (self->shader_program, COLOR_ATTR, "color_attr");
+  glBindAttribLocation (self->shader_program, CONFIG_ATTR, "config_attr");
 
   glLinkProgram (self->shader_program);
 
@@ -303,36 +546,50 @@ glr_canvas_new (GlrContext *context, GlrTarget *target)
   glUseProgram (self->shader_program);
 
   // get uniform locations
-  self->width_loc = glGetUniformLocation (self->shader_program, "canvas_width");
-  self->height_loc = glGetUniformLocation (self->shader_program, "canvas_height");
+  self->proj_matrix_loc = glGetUniformLocation (self->shader_program,
+                                                "proj_matrix");
+  self->transform_matrix_loc = glGetUniformLocation (self->shader_program,
+                                                     "transform_matrix");
+  self->persp_matrix_loc = glGetUniformLocation (self->shader_program,
+                                                 "persp_matrix");
+  self->aa_offset_loc = glGetUniformLocation (self->shader_program,
+                                              "aa_offset");
 
-  // dyn attrs buffer
-  glEnable (GL_TEXTURE_2D);
-  glGenTextures (1, &self->dyn_attrs_buffer_tex);
-  glActiveTexture (GL_TEXTURE9);
-  glBindTexture (GL_TEXTURE_2D, self->dyn_attrs_buffer_tex);
-  glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexImage2D (GL_TEXTURE_2D,
-                0, GL_RGBA32F,
-                DYN_ATTRS_TEX_WIDTH,
-                DYN_ATTRS_TEX_HEIGHT,
-                0,
-                GL_RGBA, GL_FLOAT,
-                NULL);
-  uniform_loc = glGetUniformLocation (self->shader_program,
-                                      "dyn_attrs_buffer");
-  glUniform1i (uniform_loc, 9);
+  // batch
+  self->batch = glr_batch_new ();
 
-  /* layers */
-  g_mutex_init (&self->layers_mutex);
-  self->attached_layers = g_queue_new ();
+  // edge-aa
+  self->aa_offset = DEFAULT_EDGE_AA_OFFSET;
+  glUniform1f (self->aa_offset_loc, self->aa_offset);
 
-  g_mutex_init (&self->commit_frame_mutex);
-  g_cond_init (&self->commit_frame_cond);
+  // projection
+  self->z_depth = DEFAULT_Z_DEPTH;
+
+  // perspective matrix
+  float fov = 90.0;
+  float n = 0.0;
+  float f = self->z_depth;
+  float S = 1.0 / ( tan (fov * 0.5 * M_PI/180.0) );
+
+  Mat4 persp_matrix = {
+    {S,   0.0,          0.0,  0.0},
+    {0.0,   S,          0.0,  0.0},
+    {0.0, 0.0,   -(f/(f-n)), -1.0},
+    {0.0, 0.0, -(f*n/(f-n)),  0.0}
+  };
+
+  glUniformMatrix4fv (self->persp_matrix_loc,
+                      1,
+                      GL_FALSE,
+                      &(persp_matrix[0][0]));
+
+  // transform matrix
+  glr_canvas_reset_transform (self);
+  self->current_transform_index = 0;
+
+  // texture cache
+  self->tex_cache = glr_context_get_texture_cache (self->context);
+  glr_tex_cache_ref (self->tex_cache);
 
   return self;
 }
@@ -359,62 +616,19 @@ glr_canvas_unref (GlrCanvas *self)
 }
 
 void
-glr_canvas_start_frame (GlrCanvas *self)
-{
-  if (self->frame_started)
-    {
-      g_warning ("Frame already started. Ignoring.");
-      return;
-    }
-
-  self->frame_started = TRUE;
-  self->frame_initialized = FALSE;
-}
-
-void
-glr_canvas_finish_frame (GlrCanvas *self)
-{
-  GlrCmdCommitCanvasFrame *cmd;
-
-  if (! self->frame_started)
-    {
-      g_warning ("No frame started. Ignoring.");
-      return;
-    }
-
-  cmd = g_new (GlrCmdCommitCanvasFrame, 1);
-  cmd->canvas = glr_canvas_ref (self);
-
-  g_mutex_lock (&self->commit_frame_mutex);
-
-  glr_context_queue_command (self->context,
-                             GLR_CMD_COMMIT_CANVAS_FRAME,
-                             cmd,
-                             &self->commit_frame_cond);
-
-  /* we need to block until context is done committing our frame */
-  while (self->frame_started)
-    g_cond_wait (&self->commit_frame_cond, &self->commit_frame_mutex);
-
-  self->frame_initialized = FALSE;
-  self->frame_count++;
-
-  g_mutex_unlock (&self->commit_frame_mutex);
-}
-
-void
 glr_canvas_clear (GlrCanvas *self, GlrColor color)
 {
+  assert (self != NULL);
+
   self->clear_color = color;
 
   if (self->frame_initialized)
-    {
-      clear_background (self);
-    }
+    clear_background (self);
   else
-    {
-      self->pending_clear = TRUE;
-    }
+    self->pending_clear = true;
+
+  glr_batch_reset (self->batch);
+  self->frame_initialized = false;
 }
 
 GlrTarget *
@@ -424,20 +638,329 @@ glr_canvas_get_target (GlrCanvas *self)
 }
 
 void
-glr_canvas_attach_layer (GlrCanvas *self, guint index, GlrLayer *layer)
+glr_canvas_flush (GlrCanvas *self)
 {
-  LayerAttachment *layer_attachment;
+  assert (self != NULL);
 
-  layer_attachment = g_slice_new0 (LayerAttachment);
-  layer_attachment->index = index;
-  layer_attachment->layer = glr_layer_ref (layer);
+  initialize_frame_if_needed (self);
 
-  /* @TODO: check that we are inside a frame request (i.e, glr_canvas_start_frame()) */
+  glr_batch_draw (self->batch, self->shader_program);
 
-  g_mutex_lock (&self->layers_mutex);
-  g_queue_insert_sorted (self->attached_layers,
-                         layer_attachment,
-                         (GCompareDataFunc) sort_layers_func,
-                         NULL);
-  g_mutex_unlock (&self->layers_mutex);
+  self->frame_initialized = false;
+}
+
+void
+glr_canvas_translate (GlrCanvas *self, float x, float y, float z)
+{
+  assert (self != NULL);
+
+  self->transform.translate[0] = x;
+  self->transform.translate[1] = y;
+  self->transform.translate[2] = z;
+
+  self->current_transform_index = 0;
+}
+
+void
+glr_canvas_rotate (GlrCanvas *self, float angle_x, float angle_y, float angle_z)
+{
+  assert (self != NULL);
+
+  self->transform.rotate[0] = angle_x;
+  self->transform.rotate[1] = angle_y;
+  self->transform.rotate[2] = angle_z;
+
+  self->current_transform_index = 0;
+}
+
+void
+glr_canvas_set_transform_origin (GlrCanvas *self,
+                                 float      origin_x,
+                                 float      origin_y,
+                                 float      origin_z)
+{
+  assert (self != NULL);
+
+  self->transform.origin[0] = origin_x;
+  self->transform.origin[1] = origin_y;
+  self->transform.origin[2] = origin_z;
+
+  self->current_transform_index = 0;
+}
+
+void
+glr_canvas_scale (GlrCanvas *self,
+                  float      scale_x,
+                  float      scale_y,
+                  float      scale_z)
+{
+  assert (self != NULL);
+
+  self->transform.scale[0] = scale_x;
+  self->transform.scale[1] = scale_y;
+  self->transform.scale[2] = scale_z;
+
+  self->current_transform_index = 0;
+}
+
+void
+glr_canvas_reset_transform (GlrCanvas *self)
+{
+  assert (self != NULL);
+
+  memset (&self->transform, 0x00, sizeof (GlrTransform));
+
+  self->transform.scale[0] = 1.0;
+  self->transform.scale[1] = 1.0;
+  self->transform.scale[2] = 1.0;
+
+  self->current_transform_index = 0;
+}
+
+void
+glr_canvas_draw_rect (GlrCanvas *self,
+                      float      left,
+                      float      top,
+                      float      width,
+                      float      height,
+                      GlrStyle  *style)
+{
+  assert (self != NULL);
+  assert (style != NULL);
+
+  if (glr_batch_is_full (self->batch))
+    {
+      // @TODO: flush batch
+      return;
+    }
+
+  GlrLayout lyt;
+  GlrInstanceConfig config = {0};
+  GlrBorder *br = &(style->border);
+  GlrBackground *bg = &(style->background);
+  GlrColor color;
+
+  bool has_transform = has_any_transform (&self->transform);
+  bool has_border = has_any_border (br);
+  bool has_background = bg->type != GLR_BACKGROUND_NONE;
+
+  // encode and submit border, which is common to all sub-instances
+  if (has_border)
+    encode_and_store_border (self->batch, br, config);
+
+  lyt.left = left - self->aa_offset / 2.0;
+  lyt.top = top - self->aa_offset / 2.0;
+
+  if (has_transform && (has_border || has_background))
+    encode_and_store_transform (self,
+                                lyt.left, lyt.top,
+                                &self->transform,
+                                config);
+
+  // background
+  if (has_background)
+    {
+      instance_config_set_type (config, GLR_INSTANCE_RECT_BG);
+
+      color = bg->color;
+      encode_and_store_background (self->batch,
+                                   bg,
+                                   config);
+
+      lyt.width = width + self->aa_offset;
+      lyt.height = height + self->aa_offset;
+
+      glr_batch_add_instance (self->batch, &lyt, color, config);
+    }
+
+  if (! has_border)
+    return;
+
+  // left border
+  if (br->width[0] > 0.0)
+    {
+      instance_config_set_type (config, GLR_INSTANCE_BORDER_LEFT);
+
+      lyt.width = br->width[0] + self->aa_offset;
+      lyt.height = height
+        - MAX (br->radius[0], br->width[1])
+        - MAX (br->radius[3], br->width[3]);
+      lyt.left = left - self->aa_offset / 2.0;
+      lyt.top = top + MAX (br->radius[0], br->width[1]);
+
+      glr_batch_add_instance (self->batch, &lyt, br->color[0], config);
+    }
+
+  // top border
+  if (br->width[1] > 0.0)
+    {
+      instance_config_set_type (config, GLR_INSTANCE_BORDER_TOP);
+
+      lyt.width = width
+        - MAX (br->radius[0], br->width[0])
+        - MAX (br->radius[1], br->width[2]);
+      lyt.height = br->width[1] + self->aa_offset;
+      lyt.left = left + MAX (br->radius[0], br->width[0]);
+      lyt.top = top - self->aa_offset / 2.0;
+
+      glr_batch_add_instance (self->batch, &lyt, br->color[1], config);
+    }
+
+  // right border
+  if (br->width[2] > 0.0)
+    {
+      instance_config_set_type (config, GLR_INSTANCE_BORDER_RIGHT);
+
+      lyt.width = br->width[2] + self->aa_offset;
+      lyt.height = height
+        - MAX (br->radius[1], br->width[1])
+        - MAX (br->radius[2], br->width[3]);
+      lyt.left = left - self->aa_offset / 2.0 + width - br->width[2];
+      lyt.top = top + MAX (br->radius[1], br->width[1]);
+
+      glr_batch_add_instance (self->batch, &lyt, br->color[2], config);
+    }
+
+  // bottom border
+  if (br->width[3] > 0.0)
+    {
+      instance_config_set_type (config, GLR_INSTANCE_BORDER_BOTTOM);
+
+      lyt.width = width
+        - MAX (br->radius[3], br->width[0])
+        - MAX (br->radius[2], br->width[2]);
+      lyt.height = br->width[3] + self->aa_offset;
+      lyt.left = left + MAX (br->radius[3], br->width[0]);
+      lyt.top = top - self->aa_offset / 2.0 + height - br->width[3];
+
+      glr_batch_add_instance (self->batch, &lyt, br->color[3], config);
+    }
+
+  // top-left corner
+  instance_config_set_type (config, GLR_INSTANCE_BORDER_TOP_LEFT);
+
+  lyt.width = MAX (br->radius[0], br->width[0]) + self->aa_offset / 2.0;
+  lyt.height = MAX (br->radius[0], br->width[1]) + self->aa_offset / 2.0;
+  lyt.left = left - self->aa_offset / 2.0;
+  lyt.top = top - self->aa_offset / 2.0;
+
+  glr_batch_add_instance (self->batch, &lyt, br->color[0], config);
+
+  // top-right corner
+  instance_config_set_type (config, GLR_INSTANCE_BORDER_TOP_RIGHT);
+
+  lyt.width = MAX (br->radius[1], br->width[2]) + self->aa_offset / 2.0;
+  lyt.height = MAX (br->radius[1], br->width[1]) + self->aa_offset / 2.0;
+  lyt.left = left - self->aa_offset / 2.0
+    + width - MAX (br->radius[1], br->width[2]) + self->aa_offset / 2.0;
+  lyt.top = top - self->aa_offset / 2.0;
+
+  glr_batch_add_instance (self->batch, &lyt, br->color[1], config);
+
+  // bottom-right corner
+  instance_config_set_type (config, GLR_INSTANCE_BORDER_BOTTOM_RIGHT);
+
+  lyt.width = MAX (br->radius[2], br->width[2]) + self->aa_offset / 2.0;
+  lyt.height = MAX (br->radius[2], br->width[3]) + self->aa_offset / 2.0;
+  lyt.left = left - self->aa_offset / 2.0
+    + width - MAX (br->radius[1], br->width[2]) + self->aa_offset / 2.0;
+  lyt.top = top - self->aa_offset / 2.0
+    + height - MAX (br->radius[2], br->width[3]) + self->aa_offset / 2.0;
+
+  glr_batch_add_instance (self->batch, &lyt, br->color[2], config);
+
+  // bottom-left corner
+  instance_config_set_type (config, GLR_INSTANCE_BORDER_BOTTOM_LEFT);
+
+  lyt.width = MAX (br->radius[3], br->width[0]) + self->aa_offset / 2.0;
+  lyt.height = MAX (br->radius[3], br->width[3]) + self->aa_offset / 2.0;
+  lyt.left = left - self->aa_offset / 2.0;
+  lyt.top = top - self->aa_offset / 2.0
+    + height - MAX (br->radius[3], br->width[3]) + self->aa_offset / 2.0;
+
+  glr_batch_add_instance (self->batch, &lyt, br->color[3], config);
+}
+
+void
+glr_canvas_draw_char (GlrCanvas *self,
+                      uint32_t   code_point,
+                      float      left,
+                      float      top,
+                      GlrFont   *font,
+                      GlrColor   color)
+{
+  GlrLayout lyt;
+  GlrInstanceConfig config = {0};
+  const GlrTexSurface *surface;
+  float tex_area[4] = {0};
+
+  if (glr_batch_is_full (self->batch))
+    {
+      // @TODO: need flusing
+      return;
+    }
+
+  // @FIXME: provide a default font in case none is specified
+  surface = glr_tex_cache_lookup_font_glyph (self->tex_cache,
+                                             font->face,
+                                             font->face_index,
+                                             font->size,
+                                             code_point);
+  if (surface == NULL)
+    {
+      // @FIXME: implement tex-cache flushing
+      return;
+    }
+
+  lyt.left = left + surface->pixel_left;
+  lyt.top = top - surface->pixel_top;
+  lyt.width = surface->pixel_width;
+  lyt.height = surface->pixel_height;
+
+  instance_config_set_type (config, GLR_INSTANCE_CHAR_GLYPH);
+
+  if (has_any_transform (&self->transform))
+    encode_and_store_transform (self,
+                                lyt.left,
+                                lyt.top,
+                                &self->transform,
+                                config);
+
+  tex_area[0] = surface->left;
+  tex_area[1] = surface->top;
+  tex_area[2] = surface->width;
+  tex_area[3] = surface->height;
+
+  // @FIXME: move this to a more general way of describing background
+  size_t offset;
+  offset = glr_batch_add_dyn_attr (self->batch, tex_area, sizeof (float) * 4);
+  config[2] = offset;
+
+  // bits 12 to 15 (4 bits) of config0 encode the texture unit to use,
+  // either for glyphs, background-image or border-image
+  config[0] |= surface->tex_id << 12;
+
+  glr_batch_add_instance (self->batch, &lyt, color, config);
+}
+
+void
+glr_canvas_draw_char_unicode (GlrCanvas *self,
+                              uint32_t   unicode_char,
+                              float      left,
+                              float      top,
+                              GlrFont   *font,
+                              GlrColor   color)
+{
+  assert (self != NULL);
+  assert (font != NULL);
+
+  FT_Face face;
+  face = glr_tex_cache_lookup_face (self->tex_cache,
+                                    font->face,
+                                    font->face_index);
+
+  FT_UInt glyph_index;
+  glyph_index = FT_Get_Char_Index (face, unicode_char);
+
+  glr_canvas_draw_char (self, glyph_index, left, top, font, color);
 }

@@ -6,6 +6,7 @@
 #include <X11/Xutil.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/time.h>
 
 /* @FIXME: check where should this be defined */
@@ -19,18 +20,18 @@ static EGLSurface  egl_surface;
 
 static DrawCallback draw_callback = NULL;
 static ResizeCallback resize_callback = NULL;
-static gpointer callback_user_data = NULL;
+static void *callback_user_data = NULL;
 
 #define ZOOM_FACTOR_DELTA 1.2
 
-static guint width, height;
-static gfloat zoom_factor = 1.0;
+static uint32_t width, height;
+static float zoom_factor = 1.0;
 
 static void
 log_times_per_second (void)
 {
   static struct timeval t1 = {0}, t2;
-  static guint num_frames = 0;
+  static uint32_t num_frames = 0;
 
   if (t1.tv_sec == 0)
     gettimeofday (&t1, NULL);
@@ -38,7 +39,7 @@ log_times_per_second (void)
   if (++num_frames % 100 == 0)
     {
       gettimeofday (&t2, NULL);
-      gfloat dt  =  t2.tv_sec - t1.tv_sec + (t2.tv_usec - t1.tv_usec) * 1e-6;
+      float dt  =  t2.tv_sec - t1.tv_sec + (t2.tv_usec - t1.tv_usec) * 1e-6;
       printf ("FPS: %02f\n", num_frames / dt);
       num_frames = 0;
       t1 = t2;
@@ -48,7 +49,7 @@ log_times_per_second (void)
 static void
 toggle_fullscreen (void)
 {
-  static gboolean fullscreen_mode = FALSE;
+  static bool fullscreen_mode = false;
 
   fullscreen_mode = ! fullscreen_mode;
 
@@ -77,8 +78,8 @@ toggle_fullscreen (void)
 
 /* public API */
 
-gint
-utils_initialize_x11 (guint _width, guint _height, const gchar *win_title)
+static int
+utils_initialize_x11 (uint32_t _width, uint32_t _height, const char *win_title)
 {
   width = _width;
   height = _height;
@@ -110,7 +111,7 @@ utils_initialize_x11 (guint _width, guint _height, const gchar *win_title)
   XChangeWindowAttributes (x_display, win, CWOverrideRedirect, &xattr);
 
   // fullscreen by-default
-  if (FALSE)
+  if (false)
     {
       Atom atom;
       atom = XInternAtom (x_display, "_NET_WM_STATE_FULLSCREEN", True);
@@ -118,7 +119,7 @@ utils_initialize_x11 (guint _width, guint _height, const gchar *win_title)
       XChangeProperty (x_display, win,
                        XInternAtom (x_display, "_NET_WM_STATE", True),
                        XA_ATOM,  32,  PropModeReplace,
-                       (unsigned char*) &atom, 1);
+                       (unsigned char *) &atom, 1);
     }
 
   XWMHints hints;
@@ -135,16 +136,20 @@ utils_initialize_x11 (guint _width, guint _height, const gchar *win_title)
   return 0;
 }
 
-void
+static void
 utils_finalize_x11 (void)
 {
   XDestroyWindow (x_display, win);
   XCloseDisplay (x_display);
 }
 
-gint
-utils_initialize_egl (void)
+int
+utils_initialize_egl (uint32_t    win_width,
+                      uint32_t    win_height,
+                      const char *win_title)
 {
+  utils_initialize_x11 (win_width, win_height, win_title);
+
   egl_display = eglGetDisplay ((EGLNativeDisplayType) x_display);
   if (egl_display == EGL_NO_DISPLAY)
     {
@@ -213,18 +218,23 @@ utils_finalize_egl (void)
   eglDestroyContext (egl_display, egl_context);
   eglDestroySurface (egl_display, egl_surface);
   eglTerminate (egl_display);
+
+  utils_finalize_x11 ();
 }
 
 void
-utils_main_loop (DrawCallback   draw_cb,
-                 ResizeCallback resize_cb,
-                 gpointer       user_data)
+utils_main_loop (DrawCallback    draw_cb,
+                 ResizeCallback  resize_cb,
+                 void           *user_data)
 {
   draw_callback = draw_cb;
   resize_callback = resize_cb;
   callback_user_data = user_data;
 
-  guint frame = 0;
+  if (resize_callback != NULL)
+    resize_callback (width, height, callback_user_data);
+
+  uint32_t frame = 0;
   int quit = 0;
   while (! quit)
     {

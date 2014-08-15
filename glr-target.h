@@ -1,7 +1,7 @@
 #ifndef _GLR_TARGET_H_
 #define _GLR_TARGET_H_
 
-#include <GL/gl.h>
+#include <GLES3/gl3.h>
 #include <glib.h>
 
 #include "glr-context.h"
