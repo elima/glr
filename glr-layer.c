@@ -155,16 +155,16 @@ instance_config_set_type (GlrInstanceConfig config, GlrInstanceType type)
 }
 
 static void
-add_instance_with_relative_transform1 (GlrLayer          *self,
-                                       GlrBatch          *batch,
-                                       GlrInstanceConfig  config,
-                                       GlrLayout         *layout,
-                                       gfloat             sx,
-                                       gfloat             sy,
-                                       gfloat             rx,
-                                       gfloat             ry,
-                                       gfloat             pre_rotation_z,
-                                       GlrInstanceType    instance_type)
+add_instance_with_relative_transform (GlrLayer          *self,
+                                      GlrBatch          *batch,
+                                      GlrInstanceConfig  config,
+                                      GlrLayout         *layout,
+                                      gfloat             sx,
+                                      gfloat             sy,
+                                      gfloat             rx,
+                                      gfloat             ry,
+                                      gfloat             pre_rotation_z,
+                                      GlrInstanceType    instance_type)
 {
   GlrTransform transform;
   gdouble ox, oy;
@@ -656,13 +656,13 @@ glr_layer_draw_rect (GlrLayer *self,
             - MAX (br->radius[0], br->width[0]);
         }
 
-      add_instance_with_relative_transform1 (self,
-                                             batch,
-                                             config,
-                                             &layout,
-                                             sx, sy, rx, ry,
-                                             0.0,
-                                             GLR_INSTANCE_BORDER_LEFT);
+      add_instance_with_relative_transform (self,
+                                            batch,
+                                            config,
+                                            &layout,
+                                            sx, sy, rx, ry,
+                                            0.0,
+                                            GLR_INSTANCE_BORDER_LEFT);
     }
 
   /* top border */
@@ -689,13 +689,13 @@ glr_layer_draw_rect (GlrLayer *self,
       layout.top = top - aa/2.0;
       layout.height = br->width[1] + aa;
 
-      add_instance_with_relative_transform1 (self,
-                                             batch,
-                                             config,
-                                             &layout,
-                                             sx, sy, rx, ry,
-                                             0.0,
-                                             GLR_INSTANCE_BORDER_TOP);
+      add_instance_with_relative_transform (self,
+                                            batch,
+                                            config,
+                                            &layout,
+                                            sx, sy, rx, ry,
+                                            0.0,
+                                            GLR_INSTANCE_BORDER_TOP);
     }
 
   /* right border */
@@ -722,13 +722,13 @@ glr_layer_draw_rect (GlrLayer *self,
             - br->radius[3];
         }
 
-      add_instance_with_relative_transform1 (self,
-                                             batch,
-                                             config,
-                                             &layout,
-                                             sx, sy, rx, ry,
-                                             0.0,
-                                             GLR_INSTANCE_BORDER_RIGHT);
+      add_instance_with_relative_transform (self,
+                                            batch,
+                                            config,
+                                            &layout,
+                                            sx, sy, rx, ry,
+                                            0.0,
+                                            GLR_INSTANCE_BORDER_RIGHT);
     }
 
   /* bottom border */
@@ -754,13 +754,13 @@ glr_layer_draw_rect (GlrLayer *self,
       layout.top = top + height - br->width[3] - aa/2.0;
       layout.height = br->width[3] + aa;
 
-      add_instance_with_relative_transform1 (self,
-                                             batch,
-                                             config,
-                                             &layout,
-                                             sx, sy, rx, ry,
-                                             0.0,
-                                             GLR_INSTANCE_BORDER_BOTTOM);
+      add_instance_with_relative_transform (self,
+                                            batch,
+                                            config,
+                                            &layout,
+                                            sx, sy, rx, ry,
+                                            0.0,
+                                            GLR_INSTANCE_BORDER_BOTTOM);
     }
 
   /* top left border */
@@ -773,13 +773,13 @@ glr_layer_draw_rect (GlrLayer *self,
       layout.top = top + br->radius[0] - aa/2.0;
       layout.width = br->radius[0];
       layout.height = br->radius[0];
-      add_instance_with_relative_transform1 (self,
-                                             batch,
-                                             config,
-                                             &layout,
-                                             sx, sy, rx, ry,
-                                             M_PI / 2.0 * 2.0,
-                                             GLR_INSTANCE_BORDER_TOP_LEFT);
+      add_instance_with_relative_transform (self,
+                                            batch,
+                                            config,
+                                            &layout,
+                                            sx, sy, rx, ry,
+                                            M_PI / 2.0 * 2.0,
+                                            GLR_INSTANCE_BORDER_TOP_LEFT);
     }
 
   /* top right border */
@@ -792,13 +792,13 @@ glr_layer_draw_rect (GlrLayer *self,
       layout.top = top + br->radius[1] - aa/2.0;
       layout.width = br->radius[1];
       layout.height = br->radius[1];
-      add_instance_with_relative_transform1 (self,
-                                             batch,
-                                             config,
-                                             &layout,
-                                             sx, sy, rx, ry,
-                                             M_PI / 2.0 * 1.0,
-                                             GLR_INSTANCE_BORDER_TOP_RIGHT);
+      add_instance_with_relative_transform (self,
+                                            batch,
+                                            config,
+                                            &layout,
+                                            sx, sy, rx, ry,
+                                            M_PI / 2.0 * 1.0,
+                                            GLR_INSTANCE_BORDER_TOP_RIGHT);
     }
 
   /* bottom left border */
@@ -810,13 +810,13 @@ glr_layer_draw_rect (GlrLayer *self,
       layout.top = top + height - br->radius[2] + aa/2.0;
       layout.width = br->radius[2];
       layout.height = br->radius[2];
-      add_instance_with_relative_transform1 (self,
-                                             batch,
-                                             config,
-                                             &layout,
-                                             sx, sy, rx, ry,
-                                             M_PI / 2.0 * 3.0,
-                                             GLR_INSTANCE_BORDER_BOTTOM_LEFT);
+      add_instance_with_relative_transform (self,
+                                            batch,
+                                            config,
+                                            &layout,
+                                            sx, sy, rx, ry,
+                                            M_PI / 2.0 * 3.0,
+                                            GLR_INSTANCE_BORDER_BOTTOM_LEFT);
     }
 
   /* bottom right border */
@@ -828,12 +828,12 @@ glr_layer_draw_rect (GlrLayer *self,
       layout.top = top + height - br->radius[3] + aa/2.0;
       layout.width = br->radius[3];
       layout.height = br->radius[3];
-      add_instance_with_relative_transform1 (self,
-                                             batch,
-                                             config,
-                                             &layout,
-                                             sx, sy, rx, ry,
-                                             M_PI / 2.0 * 4.0,
-                                             GLR_INSTANCE_BORDER_BOTTOM_LEFT);
+      add_instance_with_relative_transform (self,
+                                            batch,
+                                            config,
+                                            &layout,
+                                            sx, sy, rx, ry,
+                                            M_PI / 2.0 * 4.0,
+                                            GLR_INSTANCE_BORDER_BOTTOM_LEFT);
     }
 }
